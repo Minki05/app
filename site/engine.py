@@ -17,10 +17,10 @@ def _data_dir() -> Path:
     """Raw CSVs: $RR_DATA, else site/data, else ../data (the repo's data folder)."""
     import os
     here = Path(__file__).parent
-    for c in (os.environ.get("RR_DATA"), here / "data", here.parent / "data", here.parent / "app_data"):
+    for c in (os.environ.get("RR_DATA"), here / "data", here.parent / "data"):
         if c and (Path(c) / "loans.csv").exists():
             return Path(c)
-    return here / "data"
+    return here.parent / "app_data"          # no raw CSVs: run from the repo's app_data (see web_app.Store)
 
 
 DATA_DIR = _data_dir()

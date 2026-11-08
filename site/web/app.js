@@ -56,8 +56,12 @@
     };
     el._raf = requestAnimationFrame(step);
   }
+  function put(el, text) {                // plain text that must win over a number roll still landing
+    cancelAnimationFrame(el._raf); clearTimeout(el._land); el.textContent = text; el._v = null;
+  }
   function swapText(el, text) {           // a status word that has no number to roll (No shortfall ↔ 120+)
-    if (el.textContent === text) return;
+    cancelAnimationFrame(el._raf); clearTimeout(el._land);   // a number roll still landing must not overwrite this
+    if (el.textContent === text) { el._v = null; return; }
     el.textContent = text; el._v = null;
     if (reduced) return;
     el.animate([{ opacity: 0, transform: "translateY(6px)", filter: "blur(3px)" }, { opacity: 1, transform: "none", filter: "none" }],
@@ -139,8 +143,14 @@
       if (!data) { data = await api(`/api/account/${id}`); S.accounts.set(id, data); }
     } catch (err) { toast(err.message); return; }
     const first = S.acct == null || $("#main").hidden;
+    const changed = S.acct !== id;
     S.acct = id; S.data = data;
-    if (S.preset === "furnace") S.shock.oneOff = data.profile.S;
+    if (changed) {                        // a new customer starts clean: job loss at EI 55%, nothing left over
+      const cfg = PRESETS.ei55;
+      S.preset = "ei55"; S.question = cfg.q; S.label = cfg.label;
+      S.shock = { keep: cfg.keep, bills: cfg.bills, oneOff: cfg.oneOff, ...NO_EXTRA };
+      $("#twist-note").hidden = true; $("#more-shock").open = false;
+    }
     if (location.hash !== `#/account/${id}`) history.pushState(null, "", `#/account/${id}`);
     $("#switch-input").value = "";
     $("#switch-input").placeholder = `#${id}`;
@@ -271,8 +281,9 @@
   // ---------------------------------------------------------------- simulate (debounced to one request per frame)
   let pending = 0, inflight = null;
   function simulate() {
-    clearTimeout(pending);
+    if (pending) return;                 // throttle: at most one request per 50 ms, always with the latest values
     pending = setTimeout(async () => {
+      pending = 0;
       if (inflight) inflight.abort();
       inflight = new AbortController();
       const pl = planFor(S.acct), sh = S.shock;
@@ -284,7 +295,7 @@
         if (sim.account_id !== S.acct) return;
         S.sim = sim; renderSim();
       } catch (err) { if (err.name !== "AbortError") toast(err.message); }
-    }, 0);
+    }, 50);
   }
 
   function simBody() {
@@ -397,9 +408,9 @@
     const conf = $("#gb-conf"), open = $("#gb-open");
     roll($("#gb-c"), s.confirmed, money);
     const pl = planFor(S.acct);
-    if (s.confirmed === 0 && !pl.checked && !pl.extra) $("#gb-c").textContent = "Not checked";
+    if (s.confirmed === 0 && !pl.checked && !pl.extra) put($("#gb-c"), "Not checked");
     if (need == null) {
-      $("#gb-need").textContent = "—"; $("#gb-r").textContent = "—";
+      put($("#gb-need"), "—"); put($("#gb-r"), "—");
       conf.style.transform = "scaleX(0)"; open.style.transform = "scaleX(1)";
       $("#gb-note").textContent = "No cushion to start with — monthly changes can't cover the starting gap.";
       $("#gb-r").classList.add("open");

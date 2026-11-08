@@ -106,8 +106,19 @@ class Store:
     def __init__(self):
         t = time.time()
         self.ms = E.load_monthly()
-        prof = E.add_peer_metrics(E.compute_profiles(self.ms, E.load_loans()))
-        ages = E.owner_ages(E.load_dispositions(), E.load_clients(), prof.index)
+        try:                                       # raw CSVs present (data/ or site/data/)
+            loans, disp, clients = E.load_loans(), E.load_dispositions(), E.load_clients()
+            prof = E.add_peer_metrics(E.compute_profiles(self.ms, loans))
+            ages = E.owner_ages(disp, clients, prof.index)
+            src = "raw CSVs in " + str(E.DATA_DIR)
+        except FileNotFoundError:                  # only the repo's app_data/: P and owner ages were saved there
+            import pandas as pd
+            extra = pd.read_csv(E.DATA_DIR / "site_extra.csv", index_col="account_id")
+            run = extra[extra.P > 0]
+            loans = pd.DataFrame({"account_id": run.index, "monthly_payment": run.P.values, "status": "C"})
+            prof = E.add_peer_metrics(E.compute_profiles(self.ms, loans))
+            ages = extra[["owner_age", "age_status"]]
+            src = "app_data/ (no raw CSVs needed)"
         self.prof = prof.join(ages, how="left")
         assert len(self.prof) == len(prof)                       # the age join must not add rows
         totals = self.ms.groupby("account_id")[list(E.OUT_COMPONENTS)].sum()
@@ -117,7 +128,7 @@ class Store:
         self.overview = self._overview()
         self._facts = {}
         self.findings = core.findings_data()
-        print(f"data ready in {time.time() - t:.1f}s · {len(self.prof):,} accounts", flush=True)
+        print(f"data ready in {time.time() - t:.1f}s · {len(self.prof):,} accounts · from {src}", flush=True)
 
     # ------------------------------------------------------------ landing
     def _overview(self) -> dict:
@@ -387,8 +398,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         # fonts never change; html/css/js revalidate so an edit shows on the next reload
         self.send_header("Cache-Control", "max-age=86400" if ctype.startswith("font/") else "no-cache")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass        # the page cancelled this request (a newer slider value is on its way): nothing to send
 
     def _json(self, obj, code=200):
         self._send(code, dumps(obj).encode(), "application/json")
@@ -456,9 +470,18 @@ def load_store() -> Store:
     return STORE
 
 
+class QuietServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError)):
+            return              # browser closed the connection early: normal while dragging a slider
+        super().handle_error(request, client_address)
+
+
 def make_server(port: int, host: str = "127.0.0.1") -> ThreadingHTTPServer:
     load_store()
-    return ThreadingHTTPServer((host, port), Handler)
+    return QuietServer((host, port), Handler)
 
 
 def main(argv=None):
