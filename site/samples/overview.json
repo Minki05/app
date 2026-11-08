@@ -1,0 +1,159 @@
+{
+ "n_accounts": 4500,
+ "period": [
+  "2020-01",
+  "2025-12"
+ ],
+ "accounts": [
+  {
+   "id": 20111,
+   "B": 17611.86,
+   "runway": "7.8 months",
+   "status": "shortfall"
+  },
+  {
+   "id": 20133,
+   "B": 30197.92,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20134,
+   "B": 16599.46,
+   "runway": "120+ months",
+   "status": "capped"
+  },
+  {
+   "id": 20143,
+   "B": 39545.62,
+   "runway": "10.7 months",
+   "status": "shortfall"
+  },
+  {
+   "id": 20160,
+   "B": 31662.45,
+   "runway": "120+ months",
+   "status": "capped"
+  },
+  {
+   "id": 20176,
+   "B": 34694.32,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20189,
+   "B": 28320.03,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20208,
+   "B": 29778.33,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20230,
+   "B": 29557.16,
+   "runway": "18.5 months",
+   "status": "shortfall"
+  },
+  {
+   "id": 20243,
+   "B": 11060.92,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20253,
+   "B": 13325.63,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20303,
+   "B": 10862.27,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20331,
+   "B": 38861.37,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20339,
+   "B": 25521.06,
+   "runway": "45.9 months",
+   "status": "shortfall"
+  },
+  {
+   "id": 20396,
+   "B": 13931.97,
+   "runway": "29.5 months",
+   "status": "shortfall"
+  },
+  {
+   "id": 20401,
+   "B": 22858.35,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20448,
+   "B": 24430.36,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20487,
+   "B": 18468.89,
+   "runway": "35.7 months",
+   "status": "shortfall"
+  },
+  {
+   "id": 20549,
+   "B": 13589.6,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20556,
+   "B": 16664.59,
+   "runway": "32.7 months",
+   "status": "shortfall"
+  },
+  {
+   "id": 20564,
+   "B": 18499.01,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20572,
+   "B": 26689.7,
+   "runway": "67.5 months",
+   "status": "shortfall"
+  },
+  {
+   "id": 20578,
+   "B": 25405.79,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20584,
+   "B": 31340.3,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  },
+  {
+   "id": 20587,
+   "B": 33981.51,
+   "runway": "No shortfall",
+   "status": "no_shortfall"
+  }
+ ]
+}

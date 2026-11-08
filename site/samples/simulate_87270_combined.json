@@ -1,0 +1,145 @@
+{
+ "account_id": 87270,
+ "target": 6,
+ "base": {
+  "status": "no_shortfall",
+  "raw": null,
+  "display": "no shortfall (120+)",
+  "headline": "No shortfall",
+  "sub": "Money in still covers money out each month.",
+  "income": 10033.145,
+  "spending": 9985.005000000001,
+  "gap": -48.13999999999942,
+  "buffer_left": 38561.115
+ },
+ "after": {
+  "status": "shortfall",
+  "raw": 7.837414329665629,
+  "display": "7.8",
+  "headline": "7.8 months",
+  "sub": "Short $4,920 a month, drawn from a $38,561 cushion.",
+  "income": 5518.22975,
+  "spending": 10438.362000000001,
+  "gap": 4920.132250000001,
+  "buffer_left": 38561.115
+ },
+ "planned": {
+  "status": "shortfall",
+  "raw": 7.837414329665629,
+  "display": "7.8",
+  "headline": "7.8 months",
+  "sub": "Short $4,920 a month, drawn from a $38,561 cushion.",
+  "income": 5518.22975,
+  "spending": 10438.362000000001,
+  "gap": 4920.132250000001,
+  "buffer_left": 38561.115
+ },
+ "lasts": true,
+ "short_by": 0.0,
+ "need": 0.0,
+ "confirmed": 0.0,
+ "applied_cut": 0.0,
+ "entered_cut": 0.0,
+ "cut_clamped": false,
+ "extra": 0.0,
+ "remaining": 0.0,
+ "one_off": 0.0,
+ "projection": {
+  "months": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12
+  ],
+  "today": [
+   38561.115,
+   38609.255,
+   38657.395,
+   38705.534999999996,
+   38753.674999999996,
+   38801.814999999995,
+   38849.954999999994,
+   38898.094999999994,
+   38946.23499999999,
+   38994.37499999999,
+   39042.51499999999,
+   39090.65499999999,
+   39138.79499999999
+  ],
+  "shock": [
+   38561.115,
+   33640.982749999996,
+   28720.850499999997,
+   23800.718249999998,
+   18880.585999999996,
+   13960.453749999993,
+   9040.321499999995,
+   4120.189249999996,
+   -799.9430000000066,
+   -5720.075250000009,
+   -10640.207500000011,
+   -15560.339750000006,
+   -20480.47200000001
+  ],
+  "plan": [
+   38561.115,
+   33640.982749999996,
+   28720.850499999997,
+   23800.718249999998,
+   18880.585999999996,
+   13960.453749999993,
+   9040.321499999995,
+   4120.189249999996,
+   -799.9430000000066,
+   -5720.075250000009,
+   -10640.207500000011,
+   -15560.339750000006,
+   -20480.47200000001
+  ]
+ },
+ "fund": {
+  "target": 29955.015000000003,
+  "to_build": 0.0,
+  "months": 0,
+  "reached": true
+ },
+ "fund_after": {
+  "target": 29955.015000000003,
+  "to_build": 0.0,
+  "months": 0,
+  "reached": true
+ },
+ "kmon": 3,
+ "save": 0.0,
+ "response": {
+  "group": "C",
+  "label": "Target period covered"
+ },
+ "guide": {
+  "why": [
+   "The cushion lasts 7.8 months \u2014 it extends beyond your 6-month target, with about $9,040 left at month 6.",
+   "It still shrinks by $4,920 a month."
+  ],
+  "actions": [
+   "To last 6 months, nothing more is needed. To stop the cushion shrinking, the monthly gap of $4,920 would have to close.",
+   "Recheck before month 6 if this situation continues past then."
+  ],
+  "result": [
+   "No changes entered \u2014 the cushion keeps shrinking by $4,920 a month."
+  ],
+  "open_gap": false
+ },
+ "backup": [
+  "The cushion of $38,561 covers a $4,920/month shortfall for 7.8 months.",
+  "You haven't confirmed any cuts or extra money in yet, so the $4,920/month shortfall is still open."
+ ]
+}

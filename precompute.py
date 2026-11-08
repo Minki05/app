@@ -105,6 +105,11 @@ how = {"No transfers with other banks": train.no_other_bank, "Went negative befo
 auc = lambda x: float(max(roc_auc_score(yy, x.fillna(x.median())), 1 - roc_auc_score(yy, x.fillna(x.median()))))
 fd["who_auc"] = {k: auc(v) for k, v in who.items()}
 fd["how_auc"] = {k: auc(v) for k, v in how.items()}
+# is each AUC different from 0.5 (coin flip)? Mann-Whitney U test = the test behind AUC
+from scipy.stats import mannwhitneyu
+mw = lambda x: float(mannwhitneyu(x.fillna(x.median())[yy == 1], x.fillna(x.median())[yy == 0]).pvalue)
+fd["who_p"] = {k: mw(v) for k, v in who.items()}
+fd["how_p"] = {k: mw(v) for k, v in how.items()}
 json.dump(fd, open(f"{OUT}/findings.json", "w"))
 
 # Monthly balance candles for the chart: open = last month's close, close = month-end balance,

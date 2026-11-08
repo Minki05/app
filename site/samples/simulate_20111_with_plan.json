@@ -1,0 +1,148 @@
+{
+ "account_id": 20111,
+ "target": 6,
+ "base": {
+  "status": "shortfall",
+  "raw": 7.792118596387217,
+  "display": "7.8",
+  "headline": "7.8 months",
+  "sub": "Short $2,260 a month, drawn from a $17,612 cushion.",
+  "income": 6339.389999999999,
+  "spending": 8599.605,
+  "gap": 2260.215,
+  "buffer_left": 17611.863333333335
+ },
+ "after": {
+  "status": "shortfall",
+  "raw": 3.444566455121732,
+  "display": "3.4",
+  "headline": "3.4 months",
+  "sub": "Short $5,113 a month, drawn from a $17,612 cushion.",
+  "income": 3486.6645,
+  "spending": 8599.605,
+  "gap": 5112.9405,
+  "buffer_left": 17611.863333333335
+ },
+ "planned": {
+  "status": "shortfall",
+  "raw": 4.282061297345132,
+  "display": "4.3",
+  "headline": "4.3 months",
+  "sub": "Short $4,113 a month, drawn from a $17,612 cushion.",
+  "income": 3686.6645,
+  "spending": 7799.605,
+  "gap": 4112.9405,
+  "buffer_left": 17611.863333333335
+ },
+ "lasts": false,
+ "short_by": 13065.779666666662,
+ "need": 2177.629944444444,
+ "confirmed": 1000.0,
+ "applied_cut": 800.0,
+ "entered_cut": 800.0,
+ "cut_clamped": false,
+ "extra": 200.0,
+ "remaining": 1177.629944444444,
+ "one_off": 0.0,
+ "projection": {
+  "months": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12
+  ],
+  "today": [
+   17611.863333333335,
+   15351.648333333334,
+   13091.433333333334,
+   10831.218333333334,
+   8571.003333333334,
+   6310.788333333334,
+   4050.5733333333337,
+   1790.3583333333336,
+   -469.85666666666657,
+   -2730.0716666666667,
+   -4990.286666666667,
+   -7250.501666666667,
+   -9510.716666666667
+  ],
+  "shock": [
+   17611.863333333335,
+   12498.922833333334,
+   7385.982333333335,
+   2273.0418333333364,
+   -2839.898666666664,
+   -7952.839166666665,
+   -13065.779666666662,
+   -18178.720166666666,
+   -23291.660666666663,
+   -28404.60116666666,
+   -33517.541666666664,
+   -38630.48216666666,
+   -43743.42266666666
+  ],
+  "plan": [
+   17611.863333333335,
+   13498.922833333334,
+   9385.982333333335,
+   5273.041833333336,
+   1160.1013333333358,
+   -2952.839166666665,
+   -7065.779666666662,
+   -11178.720166666662,
+   -15291.660666666663,
+   -19404.60116666666,
+   -23517.541666666664,
+   -27630.48216666666,
+   -31743.42266666666
+  ]
+ },
+ "fund": {
+  "target": 25798.815,
+  "to_build": 8186.951666666664,
+  "months": 28,
+  "reached": false
+ },
+ "fund_after": {
+  "target": 25798.815,
+  "to_build": 8186.951666666664,
+  "months": 28,
+  "reached": false
+ },
+ "kmon": 3,
+ "save": 300.0,
+ "response": {
+  "group": "D",
+  "label": "Monthly adjustment needed"
+ },
+ "guide": {
+  "why": [
+   "The cushion lasts 3.4 months \u2014 short of your 6-month target.",
+   "Lasting 6 months needs $2,178 a month more (less spending or more money in)."
+  ],
+  "actions": [
+   "Close $2,178 a month to last 6 months.",
+   "Enter only cuts or extra money in you've checked \u2014 unchecked cuts count as $0. The records can't show which spending could be cut.",
+   "If that isn't reachable, plan for outside help before month 4."
+  ],
+  "result": [
+   "With your changes ($1,000/month) (includes $200 of expected extra money in, which isn't guaranteed): lasts 4.3 months \u2014 $1,178 a month still needed. Target not met yet."
+  ],
+  "open_gap": true
+ },
+ "backup": [
+  "The cushion of $17,612 covers a $5,113/month shortfall for 3.4 months.",
+  "Your confirmed changes ($1,000/month) bring the shortfall down to $4,113/month, so the cushion lasts 4.3 months.",
+  "To last 6 months, you still need another $1,178/month (more cuts, more money in, or outside help). Without it, plan to need help by month 5.",
+  "The loan payment of $2,330/month is part of money out. Ask the lender early about payment options."
+ ]
+}

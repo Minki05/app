@@ -1,0 +1,15 @@
+{
+ "request": {
+  "account_id": 87270,
+  "keep": 55,
+  "bills_pct": 15,
+  "one_off": 0,
+  "target": 6,
+  "checked": false,
+  "cut": 0,
+  "extra": 0,
+  "kmon": 3,
+  "save": 0
+ },
+ "note": "POST /api/simulate body the frontend sends"
+}

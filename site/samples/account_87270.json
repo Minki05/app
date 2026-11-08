@@ -1,0 +1,396 @@
+{
+ "id": 87270,
+ "profile": {
+  "I": 10033.145,
+  "S": 9985.005000000001,
+  "F": 3022.38,
+  "H": 3022.38,
+  "B": 38561.115,
+  "P": 0.0
+ },
+ "first_month": "2022-03",
+ "last_month": "2025-12",
+ "n_months": 46,
+ "data_ok": true,
+ "base": {
+  "status": "no_shortfall",
+  "raw": null,
+  "display": "no shortfall (120+)",
+  "headline": "No shortfall",
+  "sub": "Money in still covers money out each month.",
+  "income": 10033.145,
+  "spending": 9985.005000000001,
+  "gap": -48.13999999999942,
+  "buffer_left": 38561.115
+ },
+ "spending": [
+  {
+   "month": "2025-01",
+   "money_out": 7373.53
+  },
+  {
+   "month": "2025-02",
+   "money_out": 8254.51
+  },
+  {
+   "month": "2025-03",
+   "money_out": 8997.05
+  },
+  {
+   "month": "2025-04",
+   "money_out": 6744.26
+  },
+  {
+   "month": "2025-05",
+   "money_out": 9638.91
+  },
+  {
+   "month": "2025-06",
+   "money_out": 21343.33
+  },
+  {
+   "month": "2025-07",
+   "money_out": 9575.98
+  },
+  {
+   "month": "2025-08",
+   "money_out": 12030.13
+  },
+  {
+   "month": "2025-09",
+   "money_out": 9701.83
+  },
+  {
+   "month": "2025-10",
+   "money_out": 11652.57
+  },
+  {
+   "month": "2025-11",
+   "money_out": 9135.49
+  },
+  {
+   "month": "2025-12",
+   "money_out": 14852.66
+  }
+ ],
+ "peers": {
+  "income": {
+   "ok": true,
+   "n": 760,
+   "band": 0.2,
+   "widened": false,
+   "lo": 8026.5160000000005,
+   "hi": 12039.774,
+   "age_lo": null,
+   "age_hi": null,
+   "rows": [
+    {
+     "key": "S",
+     "label": "Monthly spending",
+     "you": 9985.005000000001,
+     "median": 9762.875,
+     "p25": 8592.4325,
+     "p75": 10898.376250000001,
+     "n": 760,
+     "position": "higher than 55%"
+    },
+    {
+     "key": "S_over_I",
+     "label": "Spending as a share of money received",
+     "you": 0.9952019032915402,
+     "median": 0.9668702656034208,
+     "p25": 0.9049361507552169,
+     "p75": 1.02523144510946,
+     "n": 760,
+     "position": "higher than 63%"
+    },
+    {
+     "key": "F_over_I",
+     "label": "Recorded regular payments (share of money received)",
+     "you": 0.3012395415395671,
+     "median": 0.299734911993165,
+     "p25": 0.10089079928805285,
+     "p75": 0.4557560190502564,
+     "n": 760,
+     "position": "higher than 51%"
+    },
+    {
+     "key": "P_over_I",
+     "label": "Current loan payment burden (share of money received)",
+     "you": 0.0,
+     "median": 0.0,
+     "p25": 0.0,
+     "p75": 0.0,
+     "n": 760,
+     "position": "higher than 0% \u00b7 same as 87%"
+    },
+    {
+     "key": "B_over_S",
+     "label": "Cash cushion relative to spending (months)",
+     "you": 3.8619024226828125,
+     "median": 2.6817142926865047,
+     "p25": 1.875968775325702,
+     "p75": 3.7728967640086104,
+     "n": 760,
+     "position": "higher than 76%"
+    }
+   ],
+   "mix": [
+    {
+     "key": "household_bills",
+     "label": "Household Bills",
+     "you": 0.26035171187185696,
+     "peer": 0.2107391773723008
+    },
+    {
+     "key": "insurance",
+     "label": "Insurance",
+     "you": 0.0,
+     "peer": 0.0
+    },
+    {
+     "key": "loan_payments",
+     "label": "Loan Payments",
+     "you": 0.0,
+     "peer": 0.0
+    },
+    {
+     "key": "bank_fees",
+     "label": "Bank Fees",
+     "you": 0.000791638454496908,
+     "peer": 0.0007578598477472546
+    },
+    {
+     "key": "cash_withdrawals_genuine",
+     "label": "Cash Withdrawals",
+     "you": 0.7071460811344566,
+     "peer": 0.6827286898094094
+    },
+    {
+     "key": "card_withdrawals",
+     "label": "Card Withdrawals",
+     "you": 0.031710568539189514,
+     "peer": 0.0
+    },
+    {
+     "key": "transfers_out_other",
+     "label": "Other Transfers",
+     "you": 0.0,
+     "peer": 0.0
+    }
+   ]
+  },
+  "age": {
+   "ok": true,
+   "n": 879,
+   "band": null,
+   "widened": false,
+   "lo": null,
+   "hi": null,
+   "age_lo": 51.0,
+   "age_hi": 61.0,
+   "rows": [
+    {
+     "key": "S",
+     "label": "Monthly spending",
+     "you": 9985.005000000001,
+     "median": 9190.25,
+     "p25": 3809.3500000000004,
+     "p75": 14007.615,
+     "n": 879,
+     "position": "higher than 55%"
+    },
+    {
+     "key": "S_over_I",
+     "label": "Spending as a share of money received",
+     "you": 0.9952019032915402,
+     "median": 0.9407288085484036,
+     "p25": 0.8107618711016396,
+     "p75": 1.0118515905880867,
+     "n": 874,
+     "position": "higher than 69%"
+    },
+    {
+     "key": "F_over_I",
+     "label": "Recorded regular payments (share of money received)",
+     "you": 0.3012395415395671,
+     "median": 0.2538092378294649,
+     "p25": 0.0029808949566967917,
+     "p75": 0.46150338935636914,
+     "n": 874,
+     "position": "higher than 56%"
+    },
+    {
+     "key": "P_over_I",
+     "label": "Current loan payment burden (share of money received)",
+     "you": 0.0,
+     "median": 0.0,
+     "p25": 0.0,
+     "p75": 0.0,
+     "n": 874,
+     "position": "higher than 0% \u00b7 same as 88%"
+    },
+    {
+     "key": "B_over_S",
+     "label": "Cash cushion relative to spending (months)",
+     "you": 3.8619024226828125,
+     "median": 2.91912275598918,
+     "p25": 1.8565725788301182,
+     "p75": 5.063245911343437,
+     "n": 857,
+     "position": "higher than 63%"
+    }
+   ],
+   "mix": [
+    {
+     "key": "household_bills",
+     "label": "Household Bills",
+     "you": 0.26035171187185696,
+     "peer": 0.17290743366503783
+    },
+    {
+     "key": "insurance",
+     "label": "Insurance",
+     "you": 0.0,
+     "peer": 0.0
+    },
+    {
+     "key": "loan_payments",
+     "label": "Loan Payments",
+     "you": 0.0,
+     "peer": 0.0
+    },
+    {
+     "key": "bank_fees",
+     "label": "Bank Fees",
+     "you": 0.000791638454496908,
+     "peer": 0.0007993487636548168
+    },
+    {
+     "key": "cash_withdrawals_genuine",
+     "label": "Cash Withdrawals",
+     "you": 0.7071460811344566,
+     "peer": 0.6946721588047852
+    },
+    {
+     "key": "card_withdrawals",
+     "label": "Card Withdrawals",
+     "you": 0.031710568539189514,
+     "peer": 0.0
+    },
+    {
+     "key": "transfers_out_other",
+     "label": "Other Transfers",
+     "you": 0.0,
+     "peer": 0.0
+    }
+   ]
+  },
+  "both": {
+   "ok": true,
+   "n": 174,
+   "band": 0.2,
+   "widened": false,
+   "lo": 8026.5160000000005,
+   "hi": 12039.774,
+   "age_lo": 51.0,
+   "age_hi": 61.0,
+   "rows": [
+    {
+     "key": "S",
+     "label": "Monthly spending",
+     "you": 9985.005000000001,
+     "median": 9398.275,
+     "p25": 8408.0575,
+     "p75": 10786.39875,
+     "n": 174,
+     "position": "higher than 63%"
+    },
+    {
+     "key": "S_over_I",
+     "label": "Spending as a share of money received",
+     "you": 0.9952019032915402,
+     "median": 0.9670396194533881,
+     "p25": 0.8980751782746109,
+     "p75": 1.0214911051271651,
+     "n": 174,
+     "position": "higher than 61%"
+    },
+    {
+     "key": "F_over_I",
+     "label": "Recorded regular payments (share of money received)",
+     "you": 0.3012395415395671,
+     "median": 0.31155437742001263,
+     "p25": 0.12772222424668542,
+     "p75": 0.47230733023567306,
+     "n": 174,
+     "position": "higher than 48%"
+    },
+    {
+     "key": "P_over_I",
+     "label": "Current loan payment burden (share of money received)",
+     "you": 0.0,
+     "median": 0.0,
+     "p25": 0.0,
+     "p75": 0.0,
+     "n": 174,
+     "position": "higher than 0% \u00b7 same as 90%"
+    },
+    {
+     "key": "B_over_S",
+     "label": "Cash cushion relative to spending (months)",
+     "you": 3.8619024226828125,
+     "median": 2.7081665211952686,
+     "p25": 1.9249224940157517,
+     "p75": 4.030203065521091,
+     "n": 174,
+     "position": "higher than 73%"
+    }
+   ],
+   "mix": [
+    {
+     "key": "household_bills",
+     "label": "Household Bills",
+     "you": 0.26035171187185696,
+     "peer": 0.222855210526236
+    },
+    {
+     "key": "insurance",
+     "label": "Insurance",
+     "you": 0.0,
+     "peer": 0.0
+    },
+    {
+     "key": "loan_payments",
+     "label": "Loan Payments",
+     "you": 0.0,
+     "peer": 0.0
+    },
+    {
+     "key": "bank_fees",
+     "label": "Bank Fees",
+     "you": 0.000791638454496908,
+     "peer": 0.0007851839813581623
+    },
+    {
+     "key": "cash_withdrawals_genuine",
+     "label": "Cash Withdrawals",
+     "you": 0.7071460811344566,
+     "peer": 0.662872055807473
+    },
+    {
+     "key": "card_withdrawals",
+     "label": "Card Withdrawals",
+     "you": 0.031710568539189514,
+     "peer": 0.0
+    },
+    {
+     "key": "transfers_out_other",
+     "label": "Other Transfers",
+     "you": 0.0,
+     "peer": 0.0
+    }
+   ]
+  }
+ }
+}

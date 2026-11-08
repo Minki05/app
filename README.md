@@ -41,3 +41,15 @@ If Gemini is missing or fails, a rule-based reader and a template take over. Gem
 ## Data and tools
 - PKDD'99 Discovery Challenge Financial dataset (CTU Prague): https://relational.fel.cvut.cz/dataset/Financial
 - Built with Python, pandas, statsmodels, scikit-learn, Streamlit, Plotly. AI assistance (Claude) was used for coding and analysis.
+
+
+## Web version (site/)
+A second front end built with our teammate's design (light and dark mode). Same numbers: runway from
+`site/engine.py` (the judging formulas), plans, risk, findings from `core.py`, twist reader and messages from `agent.py`.
+
+1. Put the raw CSVs `monthly_summary.csv`, `loans.csv`, `dispositions.csv`, `clients.csv` in `data/` (or `site/data/`).
+2. Run:
+```bash
+python site/web_app.py      # → http://127.0.0.1:8600
+```
+The Gemini key is read from `.streamlit/secrets.toml`, the same file the Streamlit app uses.

@@ -1,0 +1,118 @@
+/* Resilience Rewired · design tokens
+   Direction: "Run Rob Run" x Tangerine. Warm industrial stone canvas, charcoal slabs for the two live
+   instruments (runway + shock), ivory tiles for everything you read, one electric tangerine for what moves.
+   Editorial index tags in monospace; every figure in tabular numerals. Contrast ratios noted where they bind. */
+
+@font-face { font-family: "Source Sans 3"; src: url("fonts/SourceSans3-VF.woff2") format("woff2");
+  font-weight: 200 900; font-style: normal; font-display: swap; }
+
+:root {
+  /* canvas + surfaces */
+  --bg: #EFECE6;                 /* warm stone canvas */
+  --bg-2: #F5F3EE;               /* lifted stone (inputs on stone, segmented tracks) */
+  --surface: #FFFFFF;            /* ivory tile */
+  --surface-2: #F5F3EE;
+  --hairline: rgba(20, 20, 19, .08);
+  --line: rgba(20, 20, 19, .14);
+  --rule: rgba(20, 20, 19, .22);  /* editorial rules on the canvas */
+
+  /* ink */
+  --ink: #141413;
+  --ink-2: #3A3935;
+  --muted: #6B6862;              /* 5.2:1 on white, 4.6:1 on stone */
+
+  /* tangerine */
+  --accent: #F57327;             /* marks, chart line, pins, active fills (non-text) */
+  --accent-ui: #E2600F;          /* slider/switch fills, 3.3:1 on white */
+  --accent-text: #B4480F;        /* orange text, 5.4:1 on white */
+  --accent-wash: #FDEBDD;
+
+  /* status */
+  --plan: #10B981;               /* emerald: the customer's own plan */
+  --plan-text: #047857;          /* 5.5:1 on white */
+  --risk: #DC2626;
+  --risk-text: #B42318;          /* 6.1:1 on white */
+  --risk-wash: #FDECEA;
+  --ok: #157F3B;                 /* 5.3:1 on white */
+  --ok-wash: #E9F6EE;
+  --slate: #9A968D;              /* "today" baseline */
+
+  /* charcoal slab (dark tiles re-map the tokens below inside .tile-dark) */
+  --slab: #141413;
+  --slab-2: #1F1E1C;
+  --slab-line: rgba(245, 243, 238, .12);
+  --on-slab: #F5F3EE;
+  --on-slab-2: #CFCBC2;
+  --on-slab-muted: #9C988F;      /* 6.6:1 on #141413 */
+
+  /* type */
+  --sans: "Source Sans 3", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --display-weight: 900;
+  --display-track: -0.045em;
+
+  /* space · radius · depth */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px; --s9: 96px;
+  --r-tile: 6px; --r-ctl: 6px; --r-pill: 999px;
+  --shadow-1: 0 1px 0 rgba(20, 20, 19, .04);
+  --shadow-2: 0 1px 2px rgba(20, 20, 19, .06), 0 12px 32px -12px rgba(20, 20, 19, .18);
+  --shadow-3: 0 2px 4px rgba(20, 20, 19, .06), 0 28px 56px -16px rgba(20, 20, 19, .28);
+
+  /* motion (Emil Kowalski): strong ease-out for entrances and responses, drawer curve for switches */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --t-press: 140ms; --t-ui: 200ms; --t-stage: 560ms;
+  --press: scale(0.97);
+}
+
+/* a charcoal slab: same components, re-mapped tokens */
+.tile-dark {
+  --surface: var(--slab);
+  --surface-2: var(--slab-2);
+  --bg-2: var(--slab-2);
+  --hairline: var(--slab-line);
+  --line: rgba(245, 243, 238, .18);
+  --ink: var(--on-slab);
+  --ink-2: var(--on-slab-2);
+  --muted: var(--on-slab-muted);
+  --accent-text: #FF9A5C;        /* 7.4:1 on slab */
+  --accent-ui: #F57327;
+  --risk: #FF6B5E;
+  --risk-text: #FF8A7F;          /* 6.9:1 on slab */
+  --risk-wash: rgba(255, 107, 94, .14);
+  --ok: #5EE0A0;                 /* 10:1 on slab */
+  --ok-wash: rgba(94, 224, 160, .12);
+  background: var(--slab);
+  color: var(--on-slab);
+  border-color: transparent;
+}
+
+/* ============================================================ dark mode
+   Same stone-and-tangerine system, inverted: charcoal canvas, graphite tiles, tangerine stays the one
+   thing that moves. Follows the OS setting unless the person picks one (data-theme on <html>). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0D0D0C; --bg-2: #181715; --surface: #151413; --surface-2: #1E1D1B;
+  --hairline: rgba(245, 243, 238, .07); --line: rgba(245, 243, 238, .14); --rule: rgba(245, 243, 238, .18);
+  --ink: #F5F3EE; --ink-2: #CFCBC2; --muted: #9C988F;
+  --accent-text: #FF9A5C; --accent-wash: rgba(245, 115, 39, .14);
+  --plan-text: #5EE0A0; --risk: #FF6B5E; --risk-text: #FF8A7F; --risk-wash: rgba(255, 107, 94, .13);
+  --ok: #5EE0A0; --ok-wash: rgba(94, 224, 160, .11); --slate: #7D7970;
+  --slab: #22211F; --slab-2: #2B2A27;
+  --grid: rgba(245, 243, 238, .07); --zero: #4A4843; --peer-bar: #4A4843; --appbar: rgba(13, 13, 12, .82);
+  --shadow-3: 0 2px 4px rgba(0, 0, 0, .4), 0 28px 56px -16px rgba(0, 0, 0, .6);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0D0D0C; --bg-2: #181715; --surface: #151413; --surface-2: #1E1D1B;
+    --hairline: rgba(245, 243, 238, .07); --line: rgba(245, 243, 238, .14); --rule: rgba(245, 243, 238, .18);
+    --ink: #F5F3EE; --ink-2: #CFCBC2; --muted: #9C988F;
+    --accent-text: #FF9A5C; --accent-wash: rgba(245, 115, 39, .14);
+    --plan-text: #5EE0A0; --risk: #FF6B5E; --risk-text: #FF8A7F; --risk-wash: rgba(255, 107, 94, .13);
+    --ok: #5EE0A0; --ok-wash: rgba(94, 224, 160, .11); --slate: #7D7970;
+    --slab: #22211F; --slab-2: #2B2A27;
+    --grid: rgba(245, 243, 238, .07); --zero: #4A4843; --peer-bar: #4A4843; --appbar: rgba(13, 13, 12, .82);
+    --shadow-3: 0 2px 4px rgba(0, 0, 0, .4), 0 28px 56px -16px rgba(0, 0, 0, .6);
+  }
+}

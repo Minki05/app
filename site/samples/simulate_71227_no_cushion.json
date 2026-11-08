@@ -1,0 +1,147 @@
+{
+ "account_id": 71227,
+ "target": 6,
+ "base": {
+  "status": "buffer_gone",
+  "raw": 0.0,
+  "display": "0.0",
+  "headline": "0 months",
+  "sub": "There's no cushion left to draw on.",
+  "income": 17672.86,
+  "spending": 17565.82,
+  "gap": -107.04000000000087,
+  "buffer_left": -4617.41
+ },
+ "after": {
+  "status": "buffer_gone",
+  "raw": 0.0,
+  "display": "0.0",
+  "headline": "0 months",
+  "sub": "There's no cushion left to draw on.",
+  "income": 9720.073,
+  "spending": 17565.82,
+  "gap": 7845.746999999999,
+  "buffer_left": -4617.41
+ },
+ "planned": {
+  "status": "buffer_gone",
+  "raw": 0.0,
+  "display": "0.0",
+  "headline": "0 months",
+  "sub": "There's no cushion left to draw on.",
+  "income": 9720.073,
+  "spending": 17565.82,
+  "gap": 7845.746999999999,
+  "buffer_left": -4617.41
+ },
+ "lasts": false,
+ "short_by": 47074.481999999996,
+ "need": null,
+ "confirmed": 0.0,
+ "applied_cut": 0.0,
+ "entered_cut": 0.0,
+ "cut_clamped": false,
+ "extra": 0.0,
+ "remaining": null,
+ "one_off": 0.0,
+ "projection": {
+  "months": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12
+  ],
+  "today": [
+   -4617.41,
+   -4510.369999999999,
+   -4403.329999999998,
+   -4296.289999999997,
+   -4189.249999999996,
+   -4082.2099999999955,
+   -3975.1699999999946,
+   -3868.1299999999937,
+   -3761.089999999993,
+   -3654.049999999992,
+   -3547.009999999991,
+   -3439.9699999999903,
+   -3332.9299999999894
+  ],
+  "shock": [
+   -4617.41,
+   -12463.157,
+   -20308.904,
+   -28154.650999999998,
+   -36000.398,
+   -43846.145000000004,
+   -51691.89199999999,
+   -59537.638999999996,
+   -67383.386,
+   -75229.133,
+   -83074.88,
+   -90920.627,
+   -98766.374
+  ],
+  "plan": [
+   -4617.41,
+   -12463.157,
+   -20308.904,
+   -28154.650999999998,
+   -36000.398,
+   -43846.145000000004,
+   -51691.89199999999,
+   -59537.638999999996,
+   -67383.386,
+   -75229.133,
+   -83074.88,
+   -90920.627,
+   -98766.374
+  ]
+ },
+ "fund": {
+  "target": 52697.46,
+  "to_build": 57314.869999999995,
+  "months": null,
+  "reached": false
+ },
+ "fund_after": {
+  "target": 52697.46,
+  "to_build": 57314.869999999995,
+  "months": null,
+  "reached": false
+ },
+ "kmon": 3,
+ "save": 0.0,
+ "response": {
+  "group": "A",
+  "label": "Immediate cash need"
+ },
+ "guide": {
+  "why": [
+   "The model starts $4,617 below zero.",
+   "Separately, money out is $7,846 a month more than money in."
+  ],
+  "actions": [
+   "Find $4,617 to cover the starting gap first.",
+   "Then close the $7,846 monthly shortfall with changes you've checked."
+  ],
+  "result": [
+   "Monthly changes don't cover the starting gap \u2014 it stays at $4,617.",
+   "Monthly shortfall still open: $7,846."
+  ],
+  "open_gap": true
+ },
+ "backup": [
+  "There's no cushion to draw on (recorded cushion: \u2212$4,617). Arrange money for this first.",
+  "You haven't confirmed any cuts or extra money in yet, so the $7,846/month shortfall is still open.",
+  "Even once that's covered, money out is still $7,846/month more than money in."
+ ]
+}

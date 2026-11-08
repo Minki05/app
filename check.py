@@ -79,9 +79,8 @@ for text, want in cases:
 
 print("\n3) Month-by-month simulator agrees with the judge formula when the shock never ends")
 sys.argv = ["x"]
-src = open("app.py").read()
-ns = {"np": np}
-exec(src[src.index("def simulate("):src.index("FLEX_COLS =")], ns)
+import core  # noqa: E402
+ns = {"simulate": core.simulate}
 p = profile(20111)
 sim, _ = ns["simulate"](p["B"], p["I"], p["S"], 0.55 * p["I"], p["S"], 0)
 check("20111 job loss, ongoing", round(sim, 1), 3.4)
@@ -92,7 +91,7 @@ print("\n4) Regression checks for issues found in review")
 r = agent.parse_rules("They lose their job (EI at 57%) and their household bills go up 12% in the same month.")
 check("EI 57% kept exactly", r["ei_pct"], 57.0)
 check("bills +12% kept exactly", r["bills_up_pct"], 12.0)
-app_src = open("app.py").read()
+app_src = open("app.py").read() + open("core.py").read()
 rt = app_src[app_src.index("def read_twist"):app_src.index("def random_account")]
 check("read_twist does not round to 5%", "/ 5) * 5" in rt, False)
 r = agent.parse_rules("They lose their job (EI at 57.5%) and their household bills go up 12.5%.")
@@ -109,7 +108,17 @@ check("shock plan never cuts more than flexible spending", "cut = need_cut if fe
 check("no 'cash-only' wording in the app", "Cash-only accounts" in app_src, False)
 check("model gap labelled as association", "not a measured effect" in app_src, True)
 
-print("\n5) Gemini (optional)")
+print("\n5) Statistical tests")
+plans, _, _ = core.recommend(20111, core.profile(20111)[0], 0.55, 0.15, 0, 6, 3, 0)
+check("every ranked plan has a 95% CI above 0", all(p["sig"] for p in plans if p["pill"][0].startswith(("▲", "#"))), True)
+check("plans without a clear gap are not ranked", all(not p["pill"][0].startswith(("▲", "#")) for p in plans if not p["sig"]
+      and not p.get("pinned") and not p.get("infeasible")), True)
+check("no-transfer finding: Fisher p < 0.001", core.fisher(79, 660, 50, 3000) < 0.001, True)
+fd = core.findings_data()["cards"]
+check("every finding card carries a test", all(c.get("test") for c in fd), True)
+check("held-out AUC CI excludes 0.5", core.AUC_CI[0] > 0.5, True)
+
+print("\n6) Gemini (optional)")
 try:
     s = tomllib.load(open(".streamlit/secrets.toml", "rb"))
     os.environ["GEMINI_API_KEY"] = s["GEMINI_API_KEY"]
