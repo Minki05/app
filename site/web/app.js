@@ -563,7 +563,7 @@
       const canPay = cp.can_pay ?? cp.left >= 0, cashLeft = cp.cash_left ?? cp.left > 0;
       if (canPay && cashLeft) { v.className = "verdict yes"; v.innerHTML = `${ok}Can pay the ${money(cp.cost)} from ${src} · ${cp.left < 0.5 ? "under $1" : money(cp.left)} left`; }
       else if (canPay) { v.className = "verdict yes"; v.innerHTML = `${ok}Can pay the ${money(cp.cost)} from ${src} · no cash left after`; }
-      else { v.className = "verdict no"; v.innerHTML = `${no}${src[0].toUpperCase() + src.slice(1)} (${money(cp.have)}) can't cover ${money(cp.cost)} · ${money(-cp.left)} short`; }
+      else { v.className = "verdict no"; v.innerHTML = `${no}${src[0].toUpperCase() + src.slice(1)} (${money(cp.have)}) can't cover ${money(cp.cost)} · ${-cp.left < 0.5 ? "under $1" : money(-cp.left)} short`; }
     } else if (s.question === "how_long") {
       v.className = "verdict " + (s.lasts ? "yes" : "no");
       v.innerHTML = `${s.lasts ? ok : no}Money lasts ${esc(a.headline.toLowerCase())}`;
@@ -892,7 +892,8 @@
     const on = isApplied(pl), s = S.sim;
     const result = on ? `<span class="apply-result">${esc(s.after.headline)} → <b>${esc(s.planned.headline)}</b> with ${esc(pl.apply.label)}</span>` : "";
     return `<div class="apply-row"><button type="button" class="apply-btn${on ? " on" : ""}" data-apply="${esc(key)}">
-      ${on ? "✓ On the chart" : "Show this plan on the chart"}</button>${result}</div>`;
+      ${on ? "✓ Previewing on the chart" : "Preview this cut on the chart"}</button>${result}</div>
+      <p class="apply-note">A preview: it counts in the plan only once the customer confirms they can make this cut.</p>`;
   }
   function applyPlan(key) {
     const pl = (S.sim.plans || []).find((x) => x.title.replace(/[\d$,.%]+/g, "#") === key);
@@ -972,7 +973,7 @@
     const g = $("#gauge"); g.style.setProperty("--g-col", col);
     $("#g-fill").style.strokeDashoffset = 264 * (1 - Math.min(r / 0.4, 1));
     roll($("#g-num"), r * 100, (v) => `${v.toFixed(1)}%`);
-    $("#g-note").textContent = `Logistic model on savings, transfers and past overdrafts · AUC ${S.sim.risk.auc.toFixed(2)} on unseen customers. Scale tops out at 40%.`;
+    $("#g-note").textContent = `Model estimate (logistic regression on savings, transfers and past overdrafts). AUC ${S.sim.risk.auc.toFixed(2)} on a 30% hold-out of 3,660 accounts: how well it ranks accounts that went below $0 above those that didn't, not a percent-correct. Scale tops out at 40%.`;
   }
 
   function renderMessage() {

@@ -212,7 +212,12 @@ def parse_rules(text):
     # --- general spending change (inflation, prices)
     m = re.search(r"(?:prices?|cost of living|inflation|spending|groceries)[^.%\d]{0,30}" + PCT, t_wo_bills)
     if m:
-        out["spending_change_pct"] = float(m.group(1))
+        # direction: "decreases / drops / falls ... by 10%" after the word, or "cut / reduce ... spending" right
+        # before it, is a decrease; anything else is an increase
+        before = t_wo_bills[max(m.start() - 25, 0):m.start()]
+        down = re.search(r"decreas|drop|fall|fell|down|lower|reduc|cut|shrink|less|declin", m.group(0)) or \
+            re.search(r"(?:cut|cuts|reduce|reduces|lower|lowers|decrease|decreases)\s+(?:[\w']+\s+){0,2}$", before)
+        out["spending_change_pct"] = -float(m.group(1)) if down else float(m.group(1))
     # --- loan / mortgage payment goes up by $X
     for m in re.finditer(r"(?:loan|mortgage|car|lease|student loan|credit card)\s+payments?[^.$]{0,30}?"
                          r"(?:up|rise|rises|increase|increases|goes up|jumps?)[^.$\d]{0,10}\$\s?(\d+(?:\.\d+)?)", t):
@@ -314,7 +319,7 @@ Return ONLY a JSON object with exactly these keys:
   a higher loan/mortgage payment of $X goes in extra_monthly_dollars; 0 if none
 - bills_up_pct: % increase in household bills, rent or utilities; 0 if none
 - extra_monthly_dollars: NEW recurring costs per month in dollars (e.g. childcare $800/month -> 800); 0 if none
-- spending_change_pct: % change in overall spending (e.g. prices up 5% -> 5); 0 if none
+- spending_change_pct: % change in overall spending, negative for a decrease (prices up 5% -> 5, spending decreases 10% -> -10); 0 if none
 - one_off_dollars: total one-time costs in dollars (repairs, bills, emergencies); 0 if none
 - one_off_months_of_spending: one-time cost stated as months of typical spending (e.g. "a full month" -> 1); 0 if none
 - windfall_dollars: one-time money coming IN (bonus, tax refund, gift, severance); 0 if none

@@ -33,7 +33,11 @@ If Gemini is unavailable, the rule-based reader and a template message take over
 - `agent.py` — twist-card reader (Gemini + rule-based cross-check) and customer message
 - `precompute.py` — builds `app_data/` from the raw CSVs (only step that reads transactions.csv)
 - `discovery.py` — reproduces every finding from the raw data (output in `discovery_output.txt`)
-- `check.py` — 52 automated checks: judges' example answers, twist-card phrasings, regression and statistical tests
+- `check.py` — 61 automated checks: judges' example answers, twist-card phrasings, regression and statistical tests
+- `site/check_web.py` — 127 checks through the real web server and page
+- `site/check_guardrails.py` — 73 demo guardrails, run with AI switched off: screens agree after a plan is applied,
+  increase vs decrease is read correctly, no action is claimed to cause lower risk, only confirmed cuts count,
+  unsaved money never counts as cash, AUC is described as ranking on a hold-out (not accuracy)
 - `app.py` — backup Streamlit front end on the same `core.py`
 
 ## Method
@@ -41,7 +45,8 @@ If Gemini is unavailable, the rule-based reader and a template message take over
 - Evidence: features from each account's past; outcome = balance below zero in the next 12 months
   (3,660 accounts with 24+ months). Replicated on loan default using pre-loan data only (682 loans).
 - Risk model: logistic regression on savings (months of spending), no transfers with other banks, past negative
-  balance. Held-out AUC 0.91 (bootstrap 95% CI 0.84–0.96).
+  balance. AUC 0.91 on a 30% hold-out of accounts (bootstrap 95% CI 0.84–0.96): how well it ranks accounts that went
+  below $0 above those that didn't. It is not a percent-correct.
 - Plans are ranked by the gap in predicted risk between the customer and customers already in the "after" state,
   and only when that gap's 95% CI (delta method) stays above zero. An association, not a measured causal effect.
 - Savings goals (emergency fund, refilling a repair, keeping 4 loan payments) are money still to be saved: they are

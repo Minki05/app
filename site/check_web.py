@@ -473,7 +473,7 @@ for (const pl of data.plans) {
   const key = pl.title.replace(/[\\d$,.%]+/g, "#");
   const html = applyRow(pl, key);
   applyPlan(key);
-  out.rows.push({title: pl.title, button: html.includes("Show this plan on the chart"), note: html.includes("isn't saved yet"),
+  out.rows.push({title: pl.title, button: (html.includes("Show this plan on the chart") || html.includes("Preview this cut on the chart")), note: html.includes("isn't saved yet"),
                  changesRisk: html.includes("Changes risk"), state: {...state}});
   state.checked = false; state.cut = 0;
 }

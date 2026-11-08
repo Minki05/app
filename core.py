@@ -140,7 +140,7 @@ def flexible_mix(acc):
     d = ms[ms.account_id == acc]
     share = (d[list(FLEX_COLS)].sum() / max(d.money_out.sum(), 1)).sort_values(ascending=False)
     parts = [f"{FLEX_COLS[k]} ({v:.0%} of spending)" for k, v in share.items() if v >= 0.05][:2]
-    return "Flexible spending is mostly " + " and ".join(parts) + "." if parts else ""
+    return "Spending outside fixed costs is mostly " + " and ".join(parts) + "." if parts else ""
 
 
 def fmt_rw(r):
@@ -247,7 +247,7 @@ def recommend(acc, p, ei_pct, bills_up, one_off, survive_months, target_months, 
         if feasible:
             title = f"Shock plan: cut ${cut:,.0f}/month to last {survive_months} months"
             do = (f"If the shock hits, lower spending from ${sp2:,.0f} to ${max_sp:,.0f}/month"
-                  + (f" ({cut / flex:.0%} of flexible spending)." if flex > 0 else "."))
+                  + (f" ({cut / flex:.0%} of spending outside fixed costs)." if flex > 0 else "."))
             you_c = (f"If this happens, your savings would last about {r_shock} months. "
                      f"Spending ${cut:,.0f} less each month stretches that to {survive_months} months.")
         else:
@@ -255,15 +255,15 @@ def recommend(acc, p, ei_pct, bills_up, one_off, survive_months, target_months, 
             gap_left = need_cut - flex
             title = f"Shock plan: spending cuts alone can't reach {survive_months} months"
             infeasible_shock = True
-            do = (f"Cutting all flexible spending (${flex:,.0f}/month) stretches the buffer to "
+            do = (f"Cutting all spending outside fixed costs (${flex:,.0f}/month) stretches the buffer to "
                   f"{fmt_rw(best)}. The other ${gap_left:,.0f}/month must come from fixed costs, "
                   f"extra income or credit.")
             you_c = (f"If this happens, your savings would last about {r_shock} months. Cutting back helps, "
                      f"but it isn't enough on its own, so we'd want to plan other support with you early.")
         plans.append(dict(prio=1, title=title, do=do,
                           you=f"After the shock the buffer lasts {r_shock} months, "
-                              f"less than the {survive_months}-month target. Flexible spending is ${flex:,.0f}/month "
-                              f"(spending minus fixed costs). {flexible_mix(acc)}",
+                              f"less than the {survive_months}-month target. Spending outside fixed costs is ${flex:,.0f}/month "
+                              f"(spending minus fixed costs; not all of it can be cut, so the plan counts only cuts the customer confirms). {flexible_mix(acc)}",
                           data=f"Customers with {label} of job-loss runway went negative within a year "
                                + peer((train.job_loss_runway >= lo) & (train.job_loss_runway < hi)) + ".",
                           new=what_if(buffer_months=B / (Sp - cut) if Sp - cut > 0 else 24) if Sp else None,
@@ -286,11 +286,11 @@ def recommend(acc, p, ei_pct, bills_up, one_off, survive_months, target_months, 
             act = f"Save ${monthly:,.0f}/month (half of the monthly surplus) → about {need / monthly:.0f} months."
         elif flex > 0 and (-surplus + 0.05 * Sp) <= flex:
             cut = -surplus + 0.05 * Sp
-            act = (f"Cut flexible spending by ${cut:,.0f}/month ({cut / flex:.0%}) and save "
+            act = (f"Cut spending outside fixed costs by ${cut:,.0f}/month ({cut / flex:.0%}) and save "
                    f"${monthly:,.0f}/month → about {need / monthly:.0f} months.")
         elif flex > 0:
             fund_blocked = True
-            act = (f"Even cutting all flexible spending (${flex:,.0f}/month) leaves a "
+            act = (f"Even cutting all spending outside fixed costs (${flex:,.0f}/month) leaves a "
                    f"${-surplus - flex:,.0f}/month deficit, so fixed costs or income need to change before saving.")
         else:
             fund_blocked = True
@@ -536,7 +536,7 @@ def findings_data():
     test = (f"Held-out AUC {AUC:.2f}, bootstrap 95% CI {lo:.2f}–{hi:.2f} (1,000 resamples): far from 0.5. "
             f"Across runway bands: chi-square {ptxt(_chi2(rows))}.")
     out.append(dict(title="The judges' runway works, our model adds to it", big=f"AUC {AUC:.2f}",
-                    sub="risk model on held-out accounts", rows=rows, fmt="pct", test=test,
+                    sub="ranking quality on a 30% hold-out of accounts (not accuracy)", rows=rows, fmt="pct", test=test,
                     notes=["Bars: job-loss runway (judge formula) vs going below $0 next year. The model adds "
                            "savings, transfers and past overdrafts."]))
     return dict(cards=out, scope=f"Features from each account's past; outcome = what happened next "
