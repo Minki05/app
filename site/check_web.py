@@ -383,6 +383,123 @@ for name, f in scen.items():
             bad_ids.append((aid, got.display, want))
     check(f"{name}: engine display == README formula for all 4,500", not bad_ids, bad_ids[:5])
 
+# ---------------------------------------------------------------------------------------------------------
+print("\n7) Future savings goals are never added to today's cash")
+EI55 = {"account_id": 20111, "keep": 55}
+code, base55 = post("/api/simulate", EI55)
+A = base55["after"]
+check("20111 keep 55%: starting cash $17,611.86, runway 3.4",
+      code == 200 and abs(A["buffer_left"] - 17611.86) < 0.01 and A["display"] == "3.4", A)
+check("…and the plan line is the same cash, not active",
+      base55["planned"]["buffer_left"] == A["buffer_left"] and base55["planned"]["display"] == "3.4"
+      and base55["plan_active"] is False and "plan_buffer" not in base55, (base55["planned"], base55["plan_active"]))
+fund = [p for p in base55["plans"] if p["title"].startswith("Build an emergency fund")]
+check("emergency fund plan kept ($8,187 to save), no chart apply, goal note sent",
+      len(fund) == 1 and abs(fund[0]["goal"] - 8186.95) < 0.01 and fund[0]["apply"] is None
+      and "isn't saved yet" in fund[0]["goal_note"] and "$8,187" in fund[0]["goal_note"], fund)
+_, rep = post("/api/simulate", {"account_id": 20111, "keep": 100, "one_off": 5000, "question": "can_pay"})
+refill = [p for p in rep["plans"] if p["title"].startswith("Refill")]
+check("repair refill plan kept ($5,000 goal), no chart apply, goal note",
+      len(refill) == 1 and refill[0]["goal"] == 5000 and refill[0]["apply"] is None and refill[0]["goal_note"], refill)
+LOAN = 24640
+_, rl = post("/api/simulate", {"account_id": LOAN, "keep": 55})
+loanp = [p for p in rl["plans"] if p["title"] == "Protect the loan payment"]
+check(f"loan protection plan ({LOAN}) kept, no chart apply, goal note",
+      len(loanp) == 1 and loanp[0]["goal"] > 0 and loanp[0]["apply"] is None and loanp[0]["goal_note"], loanp)
+# every plan on a broad sample: any 'apply' left is a monthly cut only
+bad_apply = []
+for aid in list(STORE.prof.index[::90]) + [20111, LOAN]:
+    for q in ({"keep": 55}, {"keep": 100, "one_off": 3000}, {"keep": 55, "bills_pct": 15}):
+        _, rr = post("/api/simulate", {"account_id": int(aid), **q})
+        bad_apply += [(aid, p["title"], p["apply"]) for p in rr["plans"] if p["apply"] and set(p["apply"]) != {"cut", "label"}]
+check("no plan on 52 accounts × 3 shocks offers to add savings to cash (apply = cut only)", not bad_apply, bad_apply[:3])
+for path in ("/api/simulate", "/api/message"):
+    code, r = post(path, {**EI55, "plan_buffer": 8186.951666666664})
+    check(f"{path} plan_buffer 8186.95 -> 400 with explanation",
+          code == 400 and r.get("field") == "plan_buffer" and "still to be saved" in r.get("error", ""), (code, r))
+for v, want in ((0, 200), (None, 200), (-1, 400), (10 ** 400, 400)):
+    code, r = post("/api/simulate", {**EI55, "plan_buffer": v})
+    ok = code == want and (want != 200 or r["after"] == A and r["planned"] == base55["planned"])
+    check(f"plan_buffer={'10**400' if v == 10 ** 400 else v!r} -> {want}", ok, (code, r.get("error")))
+code, r = post("/api/simulate", b'{"account_id":20111,"keep":55,"plan_buffer":NaN}', raw=True)
+check("plan_buffer NaN -> 400 field=plan_buffer", code == 400 and r.get("field") == "plan_buffer", (code, r))
+code, r = post("/api/simulate", {**EI55, "save": 5000, "kmon": 6})
+check("monthly saving $5,000 alone: same cash and runway, plan not active, only the fund timeline moves",
+      code == 200 and r["base"] == base55["base"] and r["after"] == A and r["planned"] == base55["planned"]
+      and r["plan_active"] is False and r["fund"]["months"] is not None, (r["after"], r["plan_active"], r["fund"]))
+code, r = post("/api/simulate", {**EI55, "save": 5000})    # same 3-month goal: only the saving amount differs
+check("customer message and plans unchanged by a monthly saving amount alone",
+      r["message"] == base55["message"] and r["plans"] == base55["plans"] and r["after"] == A)
+code, r = post("/api/simulate", {**EI55, "checked": True, "cut": 1000})
+P_ = r["planned"]
+check("confirmed $1,000/month cut: same starting cash, monthly gap $1,000 smaller, plan active",
+      code == 200 and P_["buffer_left"] == A["buffer_left"] and abs((A["gap"] - P_["gap"]) - 1000) < 1e-6
+      and P_["raw"] > A["raw"] and r["plan_active"] is True, (P_, A))
+code, r = post("/api/simulate", {**EI55, "extra": 500})
+check("extra money in $500: same starting cash, gap $500 smaller",
+      r["planned"]["buffer_left"] == A["buffer_left"] and abs((A["gap"] - r["planned"]["gap"]) - 500) < 1e-6, r["planned"])
+code, r = post("/api/simulate", {**EI55, "windfall": 3000})
+check("one-off money in (windfall) $3,000 still adds to cash, as before",
+      abs(r["after"]["buffer_left"] - (B20111 + 3000)) < 1e-6 and r["after"]["display"]
+      == readme_runway(B20111 + 3000, A["income"], A["spending"]), r["after"])
+NEG = int(STORE.prof[STORE.prof.B <= 0].index[0])
+code, r = post("/api/simulate", {"account_id": NEG, "keep": 55, "save": 1000})
+check(f"no-cushion account {NEG}: still 0 months, plan line not lifted by any savings goal",
+      code == 200 and r["after"]["status"] == "buffer_gone" and r["planned"]["status"] == "buffer_gone"
+      and r["planned"]["buffer_left"] == r["after"]["buffer_left"] <= 0 and r["plan_active"] is False
+      and all(p["apply"] is None or set(p["apply"]) == {"cut", "label"} for p in r["plans"]), r["planned"])
+
+# the page's own plan-card code (site/web/app.js), run without a browser on the API's real plans
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+
+node = shutil.which("node")
+if not node:
+    print("  SKIP  page code check: node not installed")
+else:
+    src = (HERE / "web" / "app.js").read_text()
+    snippet = src[src.index("  const isApplied"):src.index("  // One plan per row")]
+    harness = """
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const state = {checked: false, cut: 0, target: 6};
+const planFor = () => state; const reduced = true; let sims = 0;
+const syncControls = () => {}; const simulate = () => { sims++; }; const goStep = () => {};
+const $ = () => ({scrollIntoView() {}});
+const data = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const S = {acct: 20111, sim: data};
+""" + snippet + """
+const out = {rows: [], sentBefore: sims};
+for (const pl of data.plans) {
+  const key = pl.title.replace(/[\\d$,.%]+/g, "#");
+  const html = applyRow(pl, key);
+  applyPlan(key);
+  out.rows.push({title: pl.title, button: html.includes("Show this plan on the chart"), note: html.includes("isn't saved yet"),
+                 changesRisk: html.includes("Changes risk"), state: {...state}});
+  state.checked = false; state.cut = 0;
+}
+out.state = state; out.sims = sims;
+console.log(JSON.stringify(out));
+"""
+    res = subprocess.run([node, "-e", harness], input=json.dumps(base55), capture_output=True, text=True, timeout=30)
+    try:
+        js = json.loads(res.stdout)
+    except ValueError:
+        js = None
+    check("page code runs on the real API plans", js is not None, res.stderr[-300:])
+    if js:
+        rows = {r["title"]: r for r in js["rows"]}
+        f_ = rows.get(fund[0]["title"], {})
+        check("page: savings goal shows the note, no 'Show this plan' button, no 'Changes risk'",
+              f_.get("note") and not f_.get("button") and not f_.get("changesRisk"), f_)
+        check("page: clicking the savings goal changes nothing (no cash, no cut)",
+              f_.get("state") == {"checked": False, "cut": 0, "target": 6}, f_)
+        cutp = [r for t, r in rows.items() if t.startswith("Shock plan: cut")]
+        check("page: the monthly cut plan keeps its button and applies only the cut",
+              cutp and cutp[0]["button"] and cutp[0]["state"]["checked"] is True and cutp[0]["state"]["cut"] > 0
+              and set(cutp[0]["state"]) == {"checked", "cut", "target"}, cutp)
+    body = src[src.index("function simBody"):src.index("// ------", src.index("function simBody"))]
+    check("page request body no longer carries plan_buffer", "plan_buffer" not in body and "planBuffer" not in src)
+
 srv.shutdown()
 print(f"\nResult: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

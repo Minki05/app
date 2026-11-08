@@ -44,6 +44,9 @@ If Gemini is unavailable, the rule-based reader and a template message take over
   balance. Held-out AUC 0.91 (bootstrap 95% CI 0.84–0.96).
 - Plans are ranked by the gap in predicted risk between the customer and customers already in the "after" state,
   and only when that gap's 95% CI (delta method) stays above zero. An association, not a measured causal effect.
+- Savings goals (emergency fund, refilling a repair, keeping 4 loan payments) are money still to be saved: they are
+  never added to today's cash, the runway or the chart. Only a confirmed monthly cut or extra money in changes the
+  plan line, and it starts from the same cash. One-off money in (`windfall`) is a shock input and is added as before.
 - Not used: standing_orders and cards (end-of-data snapshot / mostly issued after loans → leakage).
 
 ## Data and tools

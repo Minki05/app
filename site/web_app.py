@@ -240,13 +240,14 @@ class Store:
         entered_cut = max(float(q.get("cut", 0)), 0.0) if checked else 0.0
         extra = max(float(q.get("extra", 0)), 0.0)
         kmon = int(q.get("kmon", 3))
-        save = max(float(q.get("save", 0)), 0.0)
-        plan_buffer = min(max(float(q.get("plan_buffer", 0) or 0), 0.0), 1e8)   # savings added by a chosen plan
+        save = max(float(q.get("save", 0)), 0.0)   # monthly saving for the fund timeline only, never cash today
 
         base = E.runway(p.B, p.I, p.S, p.H)
         after = E.runway(p.B, p.I, p.S, p.H, E.Shock(keep, bills, net, extra_out=extra_out))
         cut = E.applied_cut(entered_cut, after.spending)
-        planned = E.runway(p.B, p.I, p.S, p.H, E.Shock(keep, bills, net - plan_buffer, cut=cut, extra_income=extra,
+        # the plan changes the monthly flow only (confirmed cut / extra money in); the starting cash is the same
+        # as after the shock. Savings goals are future money and are never added here.
+        planned = E.runway(p.B, p.I, p.S, p.H, E.Shock(keep, bills, net, cut=cut, extra_income=extra,
                                                          extra_out=extra_out))
         need = E.improvement_needed(after.gap, after.buffer_left, target)
         confirmed = cut + extra
@@ -307,8 +308,7 @@ class Store:
             "risk": {"base": num(risk), "auc": num(core.AUC)},
             "plans": [plan_json(pl) for pl in plans],
             "message": agent.template_message(facts),
-            "account_id": aid, "target": target, "plan_active": confirmed > 0 or plan_buffer > 0,
-            "plan_buffer": num(plan_buffer),
+            "account_id": aid, "target": target, "plan_active": confirmed > 0,
             "base": runway_json(base), "after": runway_json(after), "planned": runway_json(planned),
             "lasts": lasts, "short_by": num(short_by),
             "need": num(need), "confirmed": num(confirmed), "applied_cut": num(cut),
@@ -335,7 +335,18 @@ def plan_json(pl: dict) -> dict:
             "new": num(pl["new"]) if pl["new"] is not None else None,
             "red": num(pl["red"]) if pl["red"] is not None else None, "test": pl.get("test", ""), "track": pl.get("track", ""),
             "apply": None if not pl.get("apply") else {k: (num(v) if k != "label" else v) for k, v in pl["apply"].items()},
+            "goal": num(pl.get("goal")), "goal_note": goal_note(pl.get("goal")),
             "sig": bool(pl.get("sig"))}
+
+
+def goal_note(goal) -> str:
+    """Savings goals are money still to be saved: say so, and never present the model's 'after' risk as a
+    change that has already happened."""
+    if not goal:
+        return ""
+    return (f"Savings goal ({money(goal)}): this money isn't saved yet, so it isn't added to today's cash or the "
+            f"runway chart. The risk figures compare customers who already have it saved; nothing changes "
+            f"until the goal is reached.")
 
 
 def _f(q, k, default, lo, hi):
@@ -435,6 +446,10 @@ def validate_request(path: str, q) -> dict:
             raise BadRequest(k, f"{k} must be text.")
     if path == "/api/twist" and not isinstance(q.get("text"), str):
         raise BadRequest("text", "text is required.")
+    if out.get("plan_buffer"):          # range-checked above; 0 / null / missing from older pages are fine
+        raise BadRequest("plan_buffer", "plan_buffer is no longer supported: savings goals are money still to be "
+                                        "saved, so they can't be added to today's cash. Send 0 or leave it out.")
+    out.pop("plan_buffer", None)        # not used by any calculation
     return out
 
 

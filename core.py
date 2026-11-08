@@ -233,7 +233,7 @@ def recommend(acc, p, ei_pct, bills_up, one_off, survive_months, target_months, 
                                f"{peer((train.buffer_months >= band(after, BUFFER_BANDS)[0]) & (train.buffer_months < band(after, BUFFER_BANDS)[1]))} "
                                f"went negative within a year.",
                           new=base, base_override=risk_after,
-                          apply=dict(buffer_add=float(one_off), label=f"savings refilled by ${one_off:,.0f}"),
+                          goal=float(one_off),      # saved over the coming months, not cash today (no chart apply)
                           you_c=f"You can pay the repair and still have ${B - one_off:,.0f} left. "
                                 f"Refilling it gets you back to where you were.",
                           bank="Tangerine could set up an automatic monthly transfer back into savings."))
@@ -307,8 +307,7 @@ def recommend(acc, p, ei_pct, bills_up, one_off, survive_months, target_months, 
                           new=what_if(buffer_months=goal_m), infeasible=fund_blocked,
                           track=(track_save(monthly)[0] if surplus > 0 else
                                  track_spend(max(Sp - (-surplus + 0.05 * Sp), 0))[0] if not fund_blocked else ""),
-                          apply=None if fund_blocked or need <= 0 else
-                          dict(buffer_add=float(need), label=f"emergency fund built (+${need:,.0f} savings)"),
+                          goal=float(need) if need > 0 else None,   # still to be saved: never added to cash today
                           you_c=f"Right now your savings cover about {f.buffer_months:.1f} months of normal spending.",
                           bank="Tangerine could move the amount into savings automatically on payday, "
                                "so saving happens without thinking about it."))
@@ -341,8 +340,7 @@ def recommend(acc, p, ei_pct, bills_up, one_off, survive_months, target_months, 
                                f"({loan_ev['over16_k']}/{loan_ev['over16_n']}) with 16+ payments "
                                f"(Fisher exact {ptxt(fisher(loan_ev['under4_k'], loan_ev['under4_n'], loan_ev['over16_k'], loan_ev['over16_n']))}).",
                           new=what_if(buffer_months=max(f.buffer_months, 4 * P / Sp)) if Sp else None,
-                          apply=dict(buffer_add=float(4 * P - B), label=f"savings topped up to 4 loan payments "
-                                     f"(+${4 * P - B:,.0f})") if 4 * P > B else None,
+                          goal=float(4 * P - B) if 4 * P > B else None,   # still to be saved: not cash today
                           you_c=f"Your savings would cover about {B / P:.1f} loan payments of ${P:,.0f}.",
                           bank="Tangerine could reach out before a payment is missed and offer to move the "
                                "payment date or adjust the schedule."))

@@ -83,7 +83,7 @@
     plans: new Map(), peerMode: "income", msgKey: null, openTok: 0,
   };
   const planFor = (id) => {
-    if (!S.plans.has(id)) S.plans.set(id, { target: 6, checked: false, cut: 0, extra: 0, kmon: 3, save: 0, planBuffer: 0 });
+    if (!S.plans.has(id)) S.plans.set(id, { target: 6, checked: false, cut: 0, extra: 0, kmon: 3, save: 0 });
     return S.plans.get(id);
   };
 
@@ -481,8 +481,7 @@
     const pl = planFor(S.acct), sh = S.shock;
     return { account_id: S.acct, keep: sh.keep, bills_pct: sh.bills, one_off: sh.oneOff, extra_out: sh.extraOut,
       windfall: sh.windfall, start_in: sh.startIn, lasts: sh.lasts, after_pct: sh.afterPct, question: S.question,
-      label: S.label, target: pl.target, checked: pl.checked, cut: pl.cut, extra: pl.extra, kmon: pl.kmon, save: pl.save,
-      plan_buffer: pl.planBuffer || 0 };
+      label: S.label, target: pl.target, checked: pl.checked, cut: pl.cut, extra: pl.extra, kmon: pl.kmon, save: pl.save };
   }
 
   // ---------------------------------------------------------------- twist card (Gemini, rule-based backup)
@@ -878,15 +877,15 @@
   const boldNums = (t) => esc(t).replace(/(\$[\d,]+(?:\/month)?|\d+(?:\.\d+)?%|about \d+ months)/g, "<b>$1</b>");
   const evidence = (t) => esc(t).replace(/(\d+\.\d%) \((\d+\/\d+), 95% CI ([^)]+)\)/g,
     '<span class="stat">$1</span> <span class="ci">($2 · CI $3)</span>');
-  // a plan with a money effect can be put on the chart; the others change risk only, and say so
+  // a monthly spending cut can be put on the chart; savings goals are future money and are never added to
+  // today's cash (the server says so in goal_note); the other plans change risk only, and say so
   const isApplied = (pl) => {
     const p = planFor(S.acct), a = pl.apply;
-    if (!a) return false;
-    if (a.cut != null) return p.checked && p.cut === Math.ceil(a.cut) && !p.planBuffer;
-    return (p.planBuffer || 0) === Math.ceil(a.buffer_add);
+    return !!(a && a.cut != null && p.checked && p.cut === Math.ceil(a.cut));
   };
   function applyRow(pl, key) {
-    if (!pl.apply) {
+    if (pl.goal_note) return `<p class="apply-note">${esc(pl.goal_note)}</p>`;
+    if (!pl.apply || pl.apply.cut == null) {
       return pl.kind === "safety" || pl.new == null ? ""
         : `<p class="apply-note">Changes risk, not the month-to-month cash flow, so the runway chart stays the same.</p>`;
     }
@@ -897,13 +896,10 @@
   }
   function applyPlan(key) {
     const pl = (S.sim.plans || []).find((x) => x.title.replace(/[\d$,.%]+/g, "#") === key);
-    if (!pl || !pl.apply) return;
+    if (!pl || !pl.apply || pl.apply.cut == null) return;   // only a monthly cut goes on the chart
     const p = planFor(S.acct), on = isApplied(pl);
-    p.checked = false; p.cut = 0; p.planBuffer = 0;           // one plan at a time
-    if (!on) {
-      if (pl.apply.cut != null) { p.checked = true; p.cut = Math.ceil(pl.apply.cut); }     // round up: never just short
-      else p.planBuffer = Math.ceil(pl.apply.buffer_add);
-    }
+    p.checked = false; p.cut = 0;                             // one plan at a time
+    if (!on) { p.checked = true; p.cut = Math.ceil(pl.apply.cut); }     // round up: never just short
     syncControls(); simulate();
     if (!on) {                                // the chart lives on step 1: go there and watch the plan line draw
       goStep(1);
