@@ -110,13 +110,18 @@ def parse_rules(text):
     """Backup reader: regular expressions for the common ways a twist card is phrased."""
     t = " " + text.lower().replace(",", "") + " "
     out = dict(EMPTY, unsupported=[])
-    # --- job loss + EI
-    if re.search(r"laid off|lay-?off|lose (?:their|his|her|the|a|your) job|lost (?:their|his|her|the|a|your) job|"
-                 r"loses (?:their|his|her|the|a|your) job|job loss|unemploy|fired|out of work|lose work", t) \
-            and not re.search(r"\b(?:partner|spouse|husband|wife)\b", t):
+    # --- job loss + EI   (customers write in the first person too: my / our / I / we)
+    poss = r"(?:their|his|her|the|a|your|my|our)"
+    partner = re.search(r"\b(?:partner|spouse|husband|wife)\b", t)
+    if re.search(r"laid off|lay-?off|(?:lose|lost|loses) " + poss + r" jobs?|"
+                 r"job loss|unemploy|fired|out of work|lose work", t) and not partner:
         out["job_loss"] = True
-    m = re.search(r"\bei\b[^%\d]{0,40}" + PCT, t) or \
-        re.search(PCT + r"\s*of (?:their|his|her|the|your)? ?(?:usual|normal|regular|old)? ?(?:income|pay|salary|wages?)", t)
+    # "55% of my pay" names the share directly, so it wins; "EI ... 55%" must stay inside one sentence,
+    # otherwise "... from EI. My rent goes up 15%" would read the rent rise as the EI share.
+    # When a partner loses the job, "40% of our income" is the partner's share (handled below), not EI.
+    m = (not partner and re.search(PCT + r"\s*of (?:their|his|her|the|your|my|our)? ?(?:usual|normal|regular|old)? ?"
+                                         r"(?:income|pay|salary|wages?)", t)) or \
+        re.search(r"\bei\b[^%\d.;!?]{0,40}" + PCT, t)
     if m:
         out["ei_pct"], out["job_loss"] = float(m.group(1)), True
     if out["job_loss"] and out["ei_pct"] is None:
@@ -213,7 +218,7 @@ def parse_rules(text):
     if not found and not out["unsupported"]:
         out["unsupported"].append("no shock the engine can model was found in this card")
     # --- what is being asked
-    if re.search(r"can (?:they|he|she|you) (?:afford|pay|cover)|afford it|enough to (?:pay|cover)", t):
+    if re.search(r"can (?:they|he|she|you|i|we) (?:afford|pay|cover)|afford it|enough to (?:pay|cover)", t):
         out["question"] = "can_pay"
     elif re.search(r"make it|survive|get through|keep up|stay afloat|last (?:the|that|those|until)|enough to last", t):
         out["question"] = "last_months"

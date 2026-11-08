@@ -84,6 +84,18 @@ cases += [
      dict(spending_change_pct=8.0, bills_up_pct=10.0)),
     ("Their pay is cut 20% for 4 months, then goes back to normal.", dict(survive_months=None, shock_lasts_months=4)),
 ]
+# customers describe their own situation in the first person (my / our / I / we)
+cases += [
+    ("I lost my job and get about 55% of my pay from EI. My rent and utilities are going up 15%.",
+     dict(job_loss=True, ei_pct=55.0, bills_up_pct=15.0)),
+    ("I lost my job. EI pays 55%. My rent goes up 10%.", dict(job_loss=True, ei_pct=55.0, bills_up_pct=10.0)),
+    ("I got laid off and EI covers 55% of my income.", dict(job_loss=True, ei_pct=55.0)),
+    ("I lost my job, no EI.", dict(job_loss=True, ei_pct=0.0)),
+    ("We lost our jobs and our bills went up 12%.", dict(job_loss=True, bills_up_pct=12.0)),
+    ("My hours are cut by 20%.", dict(job_loss=False, other_income_change_pct=-20.0)),
+    ("Can I afford a $2,000 car repair?", dict(one_off_dollars=2000.0, question="can_pay")),
+    ("My husband lost his job; he earns 40% of our income.", dict(job_loss=False, other_income_change_pct=-40.0)),
+]
 for text, want in cases:
     got = agent.parse_rules(text)
     check(text[:60], {k: got[k] for k in want}, want)
