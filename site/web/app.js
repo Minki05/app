@@ -486,9 +486,9 @@
   // ---------------------------------------------------------------- twist card (Gemini, rule-based backup)
   async function readTwist() {
     const text = $("#twist-text").value.trim(), btn = $("#twist-go");
-    if (!text) { $("#twist-text").focus(); toast("Paste a twist card first."); return; }
+    if (!text) { $("#twist-text").focus(); toast("Describe your situation first."); return; }
     if (btn.classList.contains("busy")) return;
-    btn.classList.add("busy"); btn.firstElementChild.textContent = "Reading…";
+    btn.classList.add("busy"); btn.firstElementChild.textContent = "Applying…";
     const acct = S.acct;
     try {
       const t = await api("/api/twist", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -499,7 +499,7 @@
       S.label = t.label || "";
       if (t.target) planFor(S.acct).target = t.target;
       const note = $("#twist-note");
-      note.innerHTML = esc(t.note) + (t.warn.length ? `<span class="warn">Not modelled: ${esc(t.warn.join("; "))}</span>` : "");
+      note.innerHTML = esc(t.note) + (t.warn.length ? `<span class="warn">Not included in this estimate: ${esc(t.warn.join("; "))}</span>` : "");
       note.hidden = false;
       const more = S.shock.extraOut || S.shock.windfall || S.shock.startIn || S.shock.lasts;
       if (more) $("#more-shock").open = true;
@@ -515,7 +515,7 @@
         el.classList.remove("flash"); void el.offsetWidth; el.style.setProperty("--k", k++); el.classList.add("flash");
       });
     } catch (err) { toast(err.message); }
-    finally { btn.classList.remove("busy"); btn.firstElementChild.textContent = "Read twist card"; }
+    finally { btn.classList.remove("busy"); btn.firstElementChild.textContent = "Apply my scenario"; }
   }
 
   // ---------------------------------------------------------------- theme (circular reveal from the button)
@@ -572,7 +572,7 @@
       const ends = s.timed.lasts ? `lasts ${s.timed.lasts} months, then money in at ${+s.timed.after_pct.toFixed(1)}%` : "ongoing";
       tm.innerHTML = `Month by month (${s.timed.start_in ? `starts in ${s.timed.start_in} months` : "starts now"}, ${ends}): ` +
         (s.timed.out != null ? `money runs out in <b>${s.timed.out.toFixed(1)} months</b>.` : "money <b>does not run out</b>.") +
-        ` <span class="fineprint">The headline uses the judges' formula, which assumes the shock never ends.</span>`;
+        ` <span class="fineprint">The headline runway assumes the change doesn't end.</span>`;
       tm.hidden = false;
     } else tm.hidden = true;
     swapText($("#cmp-today"), b.headline);

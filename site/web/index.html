@@ -111,20 +111,21 @@
 
           <!-- № 02 shock -->
           <section class="tile tile-shock" aria-labelledby="shock-title">
-            <p class="idx"><span>№ 02 // <b>Shock simulator</b></span></p>
-            <h2 id="shock-title" class="tile-title">Apply a shock</h2>
+            <p class="idx"><span>№ 02 // <b>Scenario simulator</b></span></p>
+            <h2 id="shock-title" class="tile-title">Explore a scenario</h2>
             <div class="twist">
-              <label for="twist-text" class="twist-label"><span>Twist card</span><span class="twist-ai">AI reader · Gemini</span></label>
+              <label for="twist-text" class="twist-label"><span>Describe your situation</span><span class="twist-ai">AI-assisted</span></label>
               <textarea id="twist-text" rows="3" spellcheck="false"
-                placeholder="Paste the judge's card in any wording, e.g. They lose their job (EI at 55%) and household bills go up 15%."></textarea>
-              <button type="button" class="btn-primary" id="twist-go"><span>Read twist card</span></button>
+                placeholder="Tell us what’s changing with your income or expenses. Include amounts and timing if you know them."></textarea>
+              <button type="button" class="btn-primary" id="twist-go"><span>Apply my scenario</span></button>
               <p class="twist-note" id="twist-note" hidden></p>
             </div>
-            <div class="pills" role="radiogroup" aria-label="Scenario" id="presets">
-              <button type="button" role="radio" data-preset="ei55">Job loss · EI 55%</button>
-              <button type="button" role="radio" data-preset="furnace">Furnace · 1 month of spending</button>
-              <button type="button" role="radio" data-preset="combined">Job loss + bills +15%</button>
-              <button type="button" role="radio" data-preset="none">No shock</button>
+            <p class="control-note presets-hint" id="presets-hint">Choose a starting point, then adjust the values to match your situation.</p>
+            <div class="pills" role="radiogroup" aria-label="Starting points" aria-describedby="presets-hint" id="presets">
+              <button type="button" role="radio" data-preset="ei55">Reduced income</button>
+              <button type="button" role="radio" data-preset="furnace">Unexpected expense</button>
+              <button type="button" role="radio" data-preset="combined">Lower income &amp; higher bills</button>
+              <button type="button" role="radio" data-preset="none">No changes</button>
             </div>
             <div class="control">
               <div class="control-row"><label for="r-keep">Money in that continues</label><output id="o-keep" for="r-keep"></output></div>
@@ -161,9 +162,9 @@
                 <div class="control-row"><label for="r-after">Money in after it ends</label><output id="o-after" for="r-after"></output></div>
                 <input type="range" id="r-after" min="0" max="150" step="1">
               </div>
-              <p class="fineprint">Timing feeds the month-by-month line. The judges' runway assumes the shock never ends.</p>
+              <p class="fineprint">Timing feeds the month-by-month line. The headline runway assumes the change doesn't end.</p>
             </details>
-            <p class="fineprint" id="ei-note" hidden>Competition assumption: 55% of usual money in continues. Not a model of real EI rules.</p>
+            <p class="fineprint" id="ei-note" hidden>This starting point keeps 55% of usual money in. It isn't based on any actual benefit amount — adjust the values to match your situation.</p>
           </section>
 
           <!-- № 03 plan -->
