@@ -363,9 +363,13 @@ def write_message(facts):
         verdict = "which is shorter than" if r < facts["survive"] else "which meets"
         outlook = (f"After the shock, savings would last about {r} months, {verdict} "
                    f"the goal of lasting {facts['survive']} months.")
+    now = facts["runway_now"]
+    today = ("Today, money coming in covers usual spending." if isinstance(now, str) else
+             "Today, savings are already used up." if not now else
+             f"Today, with no shock, savings would last about {now} months.")
     clean = {
         "shock": facts["shock"],
-        "runway_today_months": facts["runway_now"],
+        "today": today,
         "outlook_after_shock": outlook,
         "steps_in_order": [f"{step} {bank.replace('Tangerine could', 'We can')}" for step, bank in facts["steps"][:4]],
     }
@@ -377,6 +381,7 @@ def write_message(facts):
 Write a short message (max 120 words). Start with "Hi there," (never use an account number).
 Rules:
 - Use ONLY the facts below. Do not invent, round or change any number.
+- Write in everyday words: never copy technical labels such as "no shortfall", "120+" or "runway".
 - State the outlook exactly as given; do not say the customer "can survive" the goal if the outlook says it is shorter.
 - Keep every condition in a step (for example "Once the monthly deficit is closed").
 - No percentages or statistics about other customers. Do not blame the customer. Be supportive.
