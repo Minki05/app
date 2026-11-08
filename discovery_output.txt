@@ -1,0 +1,117 @@
+Accounts: 3660 | went below $0 in the next 12 months: 3.5%
+
+=== 2. Screen of 33 features (each controlling for judge runway), FDR-corrected ===
+                           feature  OR_per_SD       z      p               note  q_FDR
+              went_negative_before     1.9382 13.7343 0.0000                    0.0000
+                     no_other_bank     2.4003 11.5330 0.0000                    0.0000
+                       cv_spending     2.6821 11.0177 0.0000                    0.0000
+                     n_other_banks     0.3068 -8.6771 0.0000                    0.0000
+                         cv_income     1.9134  8.1367 0.0000                    0.0000
+                         dip_depth     0.3833 -7.7395 0.0000                    0.0000
+                     balance_trend     0.4151 -7.6614 0.0000                    0.0000
+share_out_cash_withdrawals_genuine     2.9114  7.3883 0.0000                    0.0000
+                        log_buffer     0.4267 -6.7171 0.0000                    0.0000
+         share_out_household_bills     0.3673 -6.0125 0.0000                    0.0000
+                        log_income     0.6056 -5.9377 0.0000                    0.0000
+                      tx_per_month     0.5098 -5.8220 0.0000                    0.0000
+                zero_income_months     1.5025  5.3480 0.0000                    0.0000
+     share_out_transfers_out_other     0.2215 -3.7164 0.0002                    0.0005
+            share_in_cash_deposits     1.3774  2.5507 0.0108                    0.0237
+              share_in_interest_in     1.4444  2.3433 0.0191                    0.0387
+                    months_history     0.7991 -2.3117 0.0208                    0.0387
+                  weekend_tx_share     1.2238  2.3029 0.0213                    0.0387
+             share_in_transfers_in     0.7829 -2.2854 0.0223                    0.0387
+        share_out_card_withdrawals     0.1051 -2.2561 0.0241                    0.0397
+                              male     1.1644  1.6328 0.1025                    0.1611
+               share_out_insurance     0.8430 -1.2525 0.2104                    0.3156
+               share_out_bank_fees     1.1959  1.2235 0.2212                    0.3173
+               share_in_pension_in     0.7549 -1.0348 0.3007                    0.4135
+                     avg_tx_amount     0.9093 -0.9268 0.3540                    0.4673
+           share_out_loan_payments     1.0548  0.8544 0.3929                    0.4987
+          district_urban_ratio_pct     0.9610 -0.4347 0.6638                    0.7835
+           district_average_salary     1.0392  0.4333 0.6648                    0.7835
+              district_inhabitants     1.0290  0.3267 0.7439                    0.8465
+              district_crimes_2023     1.0214  0.2404 0.8100                    0.8738
+                               age     1.0265  0.2265 0.8208                    0.8738
+   district_unemployment_rate_2023     0.9879 -0.1320 0.8950                    0.9230
+                     joint_account     0.0000 -0.0004 0.9997 perfect separation 0.9997
+
+=== FINDING 1. No transfers to/from any other bank ===
+
+--- Went below $0 in the next 12 months ---
+                               events     n   rate        95% CI
+no_other_bank                                                   
+has transfers                      50  3000   1.7%   1.3% - 2.2%
+no transfers with other banks      79   660  12.0%  9.7% - 14.7%
+Fisher exact p = 8.5e-29
+Controlling for buffer and past negatives: OR 6.74 (95% CI 4.39-10.36), p = 2.8e-18
+Note: 200 of 660 of these accounts still use a card or pay bills/insurance at the bank, so this means 'no transfers with other banks', NOT 'cash only'.
+
+=== FINDING 1 (replication). Loan default, pre-loan data only ===
+
+--- Loan default by transfers before the loan ---
+                               events    n   rate         95% CI
+no_other_bank                                                   
+has transfers                      28  494   5.7%    4.0% - 8.1%
+no transfers with other banks      48  188  25.5%  19.8% - 32.2%
+Controlling for buffer / loan payment: OR 5.28 (95% CI 3.07-9.08), p = 1.8e-09
+
+=== 5. Leakage check (loan default, all variables) ===
+Top features with ALL variables:
+ min_balance_med          0.146
+n_standing_orders        0.131
+interest_in_med          0.120
+month_end_balance_med    0.117
+avg_daily_balance_med    0.111
+Cards issued AFTER the loan: 79%. standing_orders.csv is an undated end-of-data snapshot. Both are excluded (leakage).
+Cross-validated AUC without them: 0.784
+
+=== FINDING 5. How money moves beats who you are (AUC, 0.5 = coin flip) ===
+  age                                 0.544
+  male                                0.531
+  district_unemployment_rate_2023     0.503
+  district_average_salary             0.511
+  district_urban_ratio_pct            0.515
+  no_other_bank                       0.724   (for comparison)
+  went_negative_before                0.757   (for comparison)
+  log_buffer                          0.699   (for comparison)
+
+--- FINDING 2. Under one month of savings is a cliff ---
+               events     n   rate         95% CI
+buffer_months                                    
+<1                 41   101  40.6%  31.5% - 50.3%
+1-2                41   800   5.1%    3.8% - 6.9%
+2-3                22   754   2.9%    1.9% - 4.4%
+3-6                17   995   1.7%    1.1% - 2.7%
+6+                  8  1010   0.8%    0.4% - 1.6%
+
+--- FINDING 3. Savings vs loan payment predicts default (pre-loan data) ---
+          events    n   rate         95% CI
+coverage                                   
+<4            19   46  41.3%  28.3% - 55.7%
+4-8           27  154  17.5%  12.3% - 24.3%
+8-16          26  307   8.5%   5.8% - 12.1%
+16+            4  175   2.3%    0.9% - 5.7%
+
+--- FINDING 4. Went negative before -> again in the next 12 months ---
+                      events     n   rate         95% CI
+went_negative_before                                    
+never                     58  3464   1.7%    1.3% - 2.2%
+went negative before      71   196  36.2%  29.8% - 43.2%
+Borrowers with a negative balance before the loan: 27 of 27 later defaulted (small group: a warning sign, not a rule).
+
+--- FINDING 6. Judge job-loss runway vs going below $0 next year ---
+            events     n   rate         95% CI
+log_runway                                    
+<3 mo           60   319  18.8%  14.9% - 23.5%
+3-6 mo          38  1051   3.6%    2.6% - 4.9%
+6-12 mo         16   893   1.8%    1.1% - 2.9%
+12+ mo          15  1397   1.1%    0.7% - 1.8%
+Risk model AUC on 30% held-out accounts: 0.909 (without past negatives: 0.858)
+Calibration by predicted-risk quintile:
+    predicted  actual
+0      0.002   0.000
+1      0.005   0.005
+2      0.011   0.009
+3      0.020   0.005
+4      0.126   0.132
