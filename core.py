@@ -111,7 +111,8 @@ def runway(B, income, spending, one_off=0):
 def simulate(B, I, S, inc2, sp2, one_off, start_in=0, lasts=0, after_frac=1.0, cut=0.0, months=120):
     """Month-by-month balance. The shock starts after `start_in` months, lasts `lasts` months (0 = ongoing),
     then income becomes `after_frac` x usual and extra costs stop. Returns (months until below $0 or None, path)."""
-    bal, path, out = B, [B], None
+    bal, path = B, [B]
+    out = 0.0 if B <= 0 else None        # no cushion at the start: it's already gone, whatever the timing
     end = start_in + lasts if lasts > 0 else 10 ** 9
     for m in range(1, months + 1):
         if m == start_in + 1:
@@ -295,6 +296,8 @@ def recommend(acc, p, ei_pct, bills_up, one_off, survive_months, target_months, 
         else:
             fund_blocked = True
             act = "Fixed costs exceed income: review fixed costs or income first."
+        # built on TODAY's income: a preparation plan for before a shock, not something to do during one
+        act = "Before any shock, on today's income: " + act[0].lower() + act[1:]
         lo, hi, label = band(f.buffer_months, BUFFER_BANDS)
         title = (f"Build an emergency fund of {goal_m} month{'s' if goal_m > 1 else ''} (${goal_m * Sp:,.0f})"
                  + (" — starter goal" if goal_m < target_months else ""))

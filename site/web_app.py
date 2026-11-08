@@ -25,6 +25,7 @@ import argparse
 import json
 import math
 import mimetypes
+import re
 import sys
 import threading
 import time
@@ -195,9 +196,18 @@ class Store:
         p = self.prof.loc[int(q["account_id"])]
         ei = float(t["ei_pct"] or 0) if t["job_loss"] else 100.0
         keep = ei * (1 + float(t["other_income_change_pct"] or 0) / 100)
+        if t.get("extra_income_dollars") and p.I > 0:      # $X more/less money in per month, as a share of usual
+            keep += float(t["extra_income_dollars"]) / float(p.I) * 100
         one_off = float(t["one_off_dollars"] or 0) + float(t["one_off_months_of_spending"] or 0) * p.S
         extra_out = float(t["extra_monthly_dollars"] or 0) + float(t["spending_change_pct"] or 0) / 100 * p.S
         warn = list(t.get("unsupported") or [])
+        if t.get("extra_income_dollars") and p.I <= 0:
+            warn.append("no usual money in to scale: set 'Money in that continues' by hand")
+        if (t.get("shock_lasts_months") or 0) > 0 and (t["bills_up_pct"] or t["extra_monthly_dollars"]
+                                                        or t["spending_change_pct"]) and \
+                (t["job_loss"] or t["other_income_change_pct"]):
+            warn.append(f"the month-by-month line ends ALL these changes after {plural(t['shock_lasts_months'], 'month')}; "
+                        f"if a cost change is permanent, set 'Shock lasts' to Ongoing")
         bills = float(t["bills_up_pct"] or 0)
         if bills > 500:
             warn.append(f"bills +{bills:g}% capped at +500%")
@@ -211,14 +221,17 @@ class Store:
             parts.append(f"job loss (EI {ei:g}%)")
         if t["other_income_change_pct"]:
             parts.append(f"income {float(t['other_income_change_pct']):+g}%")
-        return {"source": src, "note": note, "warn": warn, "label": ", ".join(parts),
-                "shock": {"keep": round(min(max(keep, 0), 150), 1), "bills": round(min(bills, 500), 1),
-                          "oneOff": round(one_off), "extraOut": round(extra_out),
-                          "windfall": round(float(t.get("windfall_dollars") or 0)),
-                          "startIn": int(t.get("starts_in_months") or 0), "lasts": int(t.get("shock_lasts_months") or 0),
-                          "afterPct": round(float(t.get("income_after_pct", 100)), 1)},
-                "question": t.get("question", "auto"),
-                "target": int(min(max(int(t["survive_months"]), 1), 24)) if t.get("survive_months") else None}
+        shock = {"keep": round(min(max(keep, 0), 150), 1), "bills": round(min(bills, 500), 1),
+                 "oneOff": round(one_off), "extraOut": round(extra_out),
+                 "windfall": round(float(t.get("windfall_dollars") or 0)),
+                 "startIn": int(t.get("starts_in_months") or 0), "lasts": int(t.get("shock_lasts_months") or 0),
+                 "afterPct": round(float(t.get("income_after_pct", 100)), 1)}
+        target = int(min(max(int(t["survive_months"]), 1), 24)) if t.get("survive_months") else None
+        return {"source": src, "note": note, "warn": warn, "label": ", ".join(parts), "shock": shock,
+                "question": t.get("question", "auto"), "target": target,
+                "fields": read_fields(text, t, shock, target, p, warn),
+                # what could NOT be put into a number (shown in red, to enter by hand); assumptions are in fields
+                "missing": [w for w in warn if not w.startswith("partner")]}
 
     def message(self, q: dict) -> dict:
         _, facts = self._simulate(q)          # this request's own facts: nothing shared with other requests
@@ -257,38 +270,47 @@ class Store:
         confirmed = cut + extra
         remaining = None if need is None else max(need - confirmed, 0.0)
         lasts = after.status in ("no_shortfall", "capped") or (after.status == "shortfall" and after.raw >= target)
-        short_by = max(target * max(after.gap, 0) - max(after.buffer_left, 0), 0.0)
+        # shortfall = how far below $0 the balance gets within the target window (right after the one-off, or at
+        # the end of the window): the same definition the month-by-month engine uses
+        L = float(after.buffer_left)
+        short_by = 0.0 if lasts else max(-min(L, L - float(after.gap) * target), 0.0)
+        # A shock with timing (starts later / ends): ONE engine, the month-by-month balance, answers every question
+        # below (verdict, shortfall, monthly change needed, plan result, guide, backup, message, chart). With no
+        # timing the judges' runway is used exactly as before (the two agree when the change never ends).
+        T = None
+        if sc["start_in"] or sc["lasts"]:
+            T = timed_engine(p, after, net, sc, target, confirmed, preview_cut + extra if preview_cut else 0.0)
+            lasts, short_by, need = T["lasts"], T["short_by"], T["need"]
+            remaining = None if need is None else max(need - confirmed, 0.0)
 
         horizon = 12
         for r in (after, planned) + ((preview,) if preview else ()):
             if r.status == "shortfall" and r.raw:
                 horizon = max(horizon, min(math.ceil(r.raw * 1.25), 60))
+        if T:
+            for o in (T["out"], T["plan_out"], T["preview_out"]):
+                horizon = max(horizon, min(math.ceil(o * 1.25), 60) if o is not None
+                              else min(sc["start_in"] + sc["lasts"] + 6, 60))
         fund = E.emergency_fund(p.S, p.B, kmon, save)
         fund_after = E.emergency_fund(p.S, after.buffer_left, kmon, save)
         response = RP.classify(float(after.buffer_left), float(after.gap), float(target))
         if aid in self.invalid:
             response = RP.classify(float("nan"), float(after.gap), float(target))
-        guide = PG.build(response, after, planned, target, max(net, 0.0), confirmed, extra, fund, save, kmon, money,
-                         fund_after=fund_after)
-        backup = E.backup_plan(after, planned, need, confirmed, target, p.P, max(net, 0.0),
-                               fmt_money=money, fmt_runway=lambda r: runway_text(r)[0])
+        if T:
+            response = RP.Response(T["group"], need, None, "", "")
+            guide, backup = timed_texts(T, sc, target, confirmed, need, remaining, p.P)
+        else:
+            guide = PG.build(response, after, planned, target, max(net, 0.0), confirmed, extra, fund, save, kmon,
+                             money, fund_after=fund_after)
+            backup = E.backup_plan(after, planned, need, confirmed, target, p.P, max(net, 0.0),
+                                   fmt_money=money, fmt_runway=lambda r: runway_text(r)[0])
         # ---- month by month (timing), can-they-pay, ranked plans, message: core.py + agent.py
         timed = None
-        if sc["start_in"] or sc["lasts"]:
-            out, path = core.simulate(p.B, p.I, p.S, after.income, after.spending, net,
-                                      start_in=sc["start_in"], lasts=sc["lasts"], after_frac=sc["after"])
-            timed = {"out": num(out), "start_in": sc["start_in"], "lasts": sc["lasts"], "after_pct": sc["after"] * 100}
-            if out is not None:
-                horizon = max(horizon, min(math.ceil(out * 1.25), 60))
-            else:
-                horizon = max(horizon, min(sc["start_in"] + sc["lasts"] + 6, 60))
-            timed["path"] = [num(v) for v in path[:horizon + 1]]
-            # the target verdict follows the month-by-month balance (the headline runway stays the judges'
-            # permanent-change number): it lasts if the balance never goes below $0 within the target months
-            low = min(path[1:target + 1]) if len(path) > target else min(path)
-            lasts = bool(low >= 0 or (out is not None and out >= target))
-            short_by = 0.0 if lasts else -float(low)
-            timed["target_basis"] = True
+        if T:
+            timed = {"out": num(T["out"]), "start_in": sc["start_in"], "lasts": sc["lasts"],
+                     "after_pct": sc["after"] * 100, "path": [num(v) for v in T["path"][:horizon + 1]],
+                     "plan_out": num(T["plan_out"]), "plan_lasts": T["plan_lasts"],
+                     "preview_out": num(T["preview_out"]), "need": num(need)}
         one_off_only = keep >= 1 and bills == 0 and extra_out == 0 and one_off > 0
         question = sc["question"] if sc["question"] != "auto" else ("can_pay" if one_off_only else "last_months")
         if question == "can_pay" and one_off <= 0:
@@ -303,6 +325,43 @@ class Store:
                        "can_pay": left >= 0, "cash_left": left > 0}
         plans, risk, _ = core.recommend(aid, dict(I=p.I, S=p.S, F=p.F, B=p.B, H=p.H), keep, bills, net,
                                         target, min(kmon, 6), extra_out)
+        if T:
+            # the shock plan is rewritten from the same month-by-month engine, so its title, steps and the cut it
+            # puts on the chart all agree with the verdict and the guide
+            flex = max(float(p.S - p.F), 0.0)
+            rest = (f"the cushion does not run out" if T["out"] is None
+                    else f"the cushion runs out in about {T['out']:.1f} months")
+            for pl in plans:
+                if not str(pl.get("title", "")).startswith("Shock plan"):
+                    continue
+                pl["you"] = (f"Counting month by month with the timing you set, {rest} (target: {target} months). "
+                             f"Spending outside fixed costs is ${flex:,.0f}/month; not all of it can be cut, so the "
+                             f"plan counts only cuts the customer confirms.")
+                pl["track"] = ""
+                if need is not None and need <= 0:
+                    pl["title"] = f"Shock plan: no cut needed to last {target} months with this timing"
+                    pl["do"] = pl["you_c"] = (f"Month by month, {rest}, which covers the {target}-month target. "
+                                              "Keep the cushion for surprises.")
+                    pl["apply"], pl["infeasible"] = None, False
+                elif need is not None and need <= flex:
+                    pl["title"] = f"Shock plan: cut ${need:,.0f}/month while the shock lasts to last {target} months"
+                    pl["do"] = (f"If the shock hits, lower spending by ${need:,.0f}/month for the "
+                                f"{plural(sc['lasts'], 'month') if sc['lasts'] else 'whole time'} it lasts"
+                                + (f" ({need / flex:.0%} of spending outside fixed costs)." if flex > 0 else "."))
+                    pl["you_c"] = (f"Month by month, {rest}. Spending ${need:,.0f} less each month while the shock "
+                                   f"lasts stretches that to {target} months.")
+                    pl["apply"] = dict(cut=float(need), label=f"spending cut by ${need:,.0f}/month during the shock")
+                    pl["infeasible"] = False
+                else:
+                    pl["title"] = f"Shock plan: spending cuts alone can't reach {target} months"
+                    pl["do"] = pl["you_c"] = (
+                        f"Month by month, {rest}. " +
+                        (f"Reaching {target} months needs ${need:,.0f}/month while the shock lasts, more than the "
+                         f"${flex:,.0f}/month of spending outside fixed costs: the rest must come from extra income "
+                         "or outside help." if need is not None else
+                         "The cushion goes below $0 as soon as the one-off cost is paid, so a monthly change can't "
+                         "fix it: arrange money for the one-off first."))
+                    pl["apply"], pl["infeasible"] = None, True
         facts = dict(customer=aid, shock=sc["text"], runway_now=core.runway(p.B, p.I, p.S),
                      runway_after=core.runway(p.B, keep * p.I, p.S + bills * p.H + extra_out, net),
                      survive=target, one_off_only=question == "can_pay", one_off=round(one_off),
@@ -313,16 +372,19 @@ class Store:
                                                                 else "does not run out"),
                      steps=[(pl["do"], pl["bank"]) for pl in plans],
                      meets_target=lasts if timed else None,
+                     meets=bool(lasts),                 # the one verdict the screen shows; the message uses it too
+                     runway_after_raw=None if after.raw is None else float(after.raw),
                      plan=None if confirmed <= 0 else dict(
-                         cut=round(cut), extra=round(extra),
-                         runway=runway_json(planned)["display"],
-                         meets=planned.status in ("no_shortfall", "capped") or (
-                             planned.status == "shortfall" and planned.raw >= target)))
+                         cut=round(cut), extra=round(extra), timed=bool(T),
+                         runway=(("no shortfall" if T["plan_out"] is None else f"{T['plan_out']:.1f} months")
+                                 if T else runway_json(planned)["display"]),
+                         meets=T["plan_lasts"] if T else (planned.status in ("no_shortfall", "capped") or (
+                             planned.status == "shortfall" and planned.raw >= target))))
         projection_extra = {"timed": timed["path"] if timed else None}
         return {
             "question": question, "can_pay": can_pay, "timed": timed, "shock_text": sc["text"],
             "risk": {"base": num(risk), "auc": num(core.AUC)},
-            "plans": [plan_json(pl) for pl in plans],
+            "plans": [plan_json(pl) for pl in plans], "timed_basis": bool(T),
             "message": agent.template_message(facts),
             "account_id": aid, "target": target, "plan_active": confirmed > 0,
             "base": runway_json(base), "after": runway_json(after), "planned": runway_json(planned),
@@ -334,15 +396,174 @@ class Store:
             "projection": {"months": list(range(horizon + 1)),
                            "today": [num(v) for v in E.projection(base.buffer_left, base.gap, horizon)],
                            "shock": [num(v) for v in E.projection(after.buffer_left, after.gap, horizon)],
-                           "plan": [num(v) for v in E.projection(planned.buffer_left, planned.gap, horizon)],
+                           "plan": ([num(v) for v in T["plan_path"][:horizon + 1]] if T else
+                                    [num(v) for v in E.projection(planned.buffer_left, planned.gap, horizon)]),
                            "preview": None if not preview else
-                           [num(v) for v in E.projection(preview.buffer_left, preview.gap, horizon)],
+                           ([num(v) for v in T["preview_path"][:horizon + 1]] if T else
+                            [num(v) for v in E.projection(preview.buffer_left, preview.gap, horizon)]),
                            **projection_extra},
             "fund": fund_json(fund), "fund_after": fund_json(fund_after), "kmon": kmon, "save": num(save),
             "response": {"group": response.group, "label": RP.LABELS[response.group]},
             "guide": {"why": guide.why, "actions": guide.actions, "result": guide.result, "open_gap": guide.open_gap},
             "backup": backup,
         }, facts
+
+
+def read_fields(text, t, shock, target, p, warn):
+    """What the card was read as, field by field, for the person to check before anything is calculated.
+    status: "read" (stated in the card), "assumed" (filled in or worked out: the reason says how), "none"."""
+    low = text.lower()
+    stated = lambda v: v and re.search(rf"(?<![\d.]){v:g}\s*(?:%|percent|per cent)", low)
+    F = []
+
+    def add(key, label, unit, status, why=""):
+        F.append({"key": key, "label": label, "unit": unit, "value": shock.get(key, target if key == "target" else 0),
+                  "status": status, "why": why})
+
+    # money in
+    why, st = [], "read"
+    if t["job_loss"]:
+        ei = float(t["ei_pct"] or 0)
+        if ei and not stated(ei):
+            st, why = "assumed", why + [f"EI share not given in the card: competition assumption {ei:g}%"]
+        elif not ei:
+            why.append("job loss with no EI: no money in from that job")
+    partner = [u for u in warn if u.startswith("partner")]
+    if partner:
+        st, why = "assumed", why + partner
+    if t.get("extra_income_dollars"):
+        st = "assumed"
+        why.append(f"${float(t['extra_income_dollars']):+,.0f}/month ÷ usual money in ${float(p.I):,.0f} = "
+                   f"{float(t['extra_income_dollars']) / max(float(p.I), 1) * 100:+.1f}% of usual")
+    changed_in = t["job_loss"] or t["other_income_change_pct"] or t.get("extra_income_dollars")
+    add("keep", "Money in that continues", "%", st if changed_in else "none", "; ".join(why))
+    add("bills", "Household bills change", "%", "read" if shock["bills"] else "none")
+    why, st = [], "read"
+    if t["spending_change_pct"]:
+        st = "assumed"
+        why.append(f"spending {float(t['spending_change_pct']):+g}% × usual spending ${float(p.S):,.0f} = "
+                   f"${float(t['spending_change_pct']) / 100 * float(p.S):+,.0f}/month")
+    add("extraOut", "New monthly costs (− = lower)", "$", st if shock["extraOut"] else "none", "; ".join(why))
+    why, st = [], "read"
+    if t["one_off_months_of_spending"]:
+        st = "assumed"
+        why.append(f"{float(t['one_off_months_of_spending']):g} month(s) of usual spending × ${float(p.S):,.0f}")
+    add("oneOff", "One-time cost", "$", st if shock["oneOff"] else "none", "; ".join(why))
+    add("windfall", "One-time money in", "$", "read" if shock["windfall"] else "none")
+    add("startIn", "Starts in (months)", "mo", "read" if shock["startIn"] else "none")
+    add("lasts", "Lasts (months, 0 = doesn't end)", "mo", "read" if shock["lasts"] else "none")
+    after_st, after_why = "none", ""
+    if shock["lasts"]:
+        back = re.search(r"new job|back to work|re-?employed|find work|finds work|hired again|back to normal|"
+                         r"returns? to|goes back", low)
+        if t["job_loss"] and not back:
+            after_st, after_why = "assumed", "the card doesn't say what happens after: assumed no new job (0%)"
+        elif stated(shock["afterPct"]) or back:
+            after_st = "read"
+        else:
+            after_st, after_why = "assumed", f"not stated: assumed {shock['afterPct']:g}% of usual"
+    add("afterPct", "Money in after it ends", "%", after_st, after_why)
+    add("target", "Target (months)", "mo", "read" if target else "none")
+    return F
+
+
+def plural(n, word):
+    return f"{n:g} {word}{'' if n == 1 else 's'}"
+
+
+def timed_engine(p, after, net, sc, target, confirmed, preview_change):
+    """Month-by-month answers for a shock with timing. A monthly change (confirmed cut + extra money in) applies
+    while the shock lasts. 'Lasts' = the balance never goes below $0 (including the moment a one-off is paid)
+    before the target month."""
+    def run(change):
+        return core.simulate(p.B, p.I, p.S, after.income + change, after.spending, net, start_in=sc["start_in"],
+                             lasts=sc["lasts"], after_frac=sc["after"])
+
+    def ok(o):
+        return o is None or o >= target
+
+    out, path = run(0.0)
+    lasts = ok(out)
+    # lowest point within the target window, including right after a one-off is paid
+    lows = list(path[1:target + 1])
+    if sc["start_in"] < target:
+        lows.append(path[sc["start_in"]] - net)
+    low = min(lows) if lows else 0.0
+    short_by = 0.0 if lasts else max(-float(low), 0.0)
+    if lasts:
+        need = 0.0
+    else:
+        hi = 10.0 * max(after.spending, p.S, 1.0)
+        if not ok(run(hi)[0]):
+            need = None                      # a monthly change can't fix it (e.g. the one-off alone is too big)
+        else:
+            lo = 0.0
+            for _ in range(50):
+                mid = (lo + hi) / 2
+                lo, hi = (lo, mid) if ok(run(mid)[0]) else (mid, hi)
+            need = math.ceil(hi * 100) / 100
+    plan_out, plan_path = run(confirmed) if confirmed > 0 else (out, path)
+    pv_out, pv_path = run(preview_change) if preview_change > 0 else (None, None)
+    buffer_gone = p.B - (net if sc["start_in"] == 0 else 0) <= 0
+    group = "A" if buffer_gone else ("C" if lasts else "D")
+    return dict(out=out, path=path, lasts=bool(lasts), short_by=short_by, need=need, low=low,
+                plan_out=plan_out, plan_path=plan_path, plan_lasts=bool(ok(plan_out)),
+                preview_out=pv_out, preview_path=pv_path, group=group)
+
+
+def timed_texts(T, sc, target, confirmed, need, remaining, loan):
+    """Guide and backup steps for a timed shock, every number from the same month-by-month engine."""
+    when = "starts now" if not sc["start_in"] else f"starts in {sc['start_in']} months"
+    ends = (f"lasts {plural(sc['lasts'], 'month')}, then money in returns to {sc['after'] * 100:g}% of usual" if sc["lasts"]
+            else "doesn't end")
+    lasts_txt = ("the cushion does not run out" if T["out"] is None
+                 else f"the cushion runs out in about {T['out']:.1f} months")
+    why = [f"Counting month by month (the shock {when} and {ends}), {lasts_txt}.",
+           (f"That covers the {target}-month target." if T["lasts"] else
+            f"That falls short of the {target}-month target: at its lowest before month {target}, the balance is "
+            f"{money(T['low'])}.")]
+    actions, result = [], []
+    if T["lasts"]:
+        actions.append("No monthly change is needed to reach the target with this timing. Keep the cushion for "
+                       "surprises.")
+    elif need is None:
+        actions.append("A monthly change during the shock can't reach the target (the cushion goes below $0 as soon "
+                       "as the one-off cost is paid). Arrange money for the one-off first.")
+    else:
+        actions.append(f"Find {money(need)}/month while the shock lasts (cuts the customer confirms, or extra money "
+                       f"in) to reach {target} months.")
+    if confirmed > 0:
+        plan_txt = ("the cushion does not run out" if T["plan_out"] is None
+                    else f"the cushion runs out in about {T['plan_out']:.1f} months")
+        result.append(f"With the {money(confirmed)}/month you confirmed, {plan_txt} (month by month), "
+                      + ("meeting the target." if T["plan_lasts"] else "still short of the target.")
+                      + (f" Still needed: {money(remaining)}/month." if remaining and remaining > 0.5 else ""))
+    elif not T["lasts"]:
+        result.append("Nothing confirmed yet, so the shortfall is still open.")
+    guide = PG.Guide(T["group"], RP.LABELS[T["group"]], why=why, actions=actions, result=result,
+                     open_gap=bool(not T["lasts"] and (remaining is None or remaining > 0.5)))
+    backup = [why[0] + " " + why[1]]
+    if not T["lasts"]:
+        if confirmed <= 0:
+            backup.append("You haven't confirmed any cuts or extra money in yet, so the shortfall is still open.")
+        else:
+            backup.append(result[0])
+        if need is not None and remaining and remaining > 0.5:
+            backup.append(f"To last {target} months, you still need another {money(remaining)}/month while the "
+                          "shock lasts (more cuts, more money in, or outside help).")
+    if loan > 0:
+        backup.append(f"The loan payment of {money(loan)}/month is part of money out. Ask the lender early about "
+                      "payment options.")
+    return guide, backup
+
+
+IF_SHOCK = ("Shock plan", "Refill the", "Protect the loan payment")
+
+
+def plan_when(title: str) -> str:
+    """Two kinds of plan, never mixed: what to do NOW on today's income (build the cushion, set things up), and
+    what to do IF the shock hits (on the post-shock cash flow)."""
+    return "if_shock" if title.startswith(IF_SHOCK) else "now"
 
 
 def plan_json(pl: dict) -> dict:
@@ -354,7 +575,7 @@ def plan_json(pl: dict) -> dict:
             "new": num(pl["new"]) if pl["new"] is not None else None,
             "red": num(pl["red"]) if pl["red"] is not None else None, "test": pl.get("test", ""), "track": pl.get("track", ""),
             "apply": None if not pl.get("apply") else {k: (num(v) if k != "label" else v) for k, v in pl["apply"].items()},
-            "goal": num(pl.get("goal")), "goal_note": goal_note(pl.get("goal")),
+            "goal": num(pl.get("goal")), "goal_note": goal_note(pl.get("goal")), "when": plan_when(pl["title"]), 
             "sig": bool(pl.get("sig"))}
 
 
@@ -405,7 +626,7 @@ def scenario_of(q: dict, S_typ: float) -> dict:
     if sc["start_in"]:
         d.append(f"starts in {sc['start_in']} months")
     if sc["lasts"]:
-        d.append(f"lasts {sc['lasts']} months")
+        d.append(f"lasts {plural(sc['lasts'], 'month')}")
     sc["text"] = ", ".join(d) or "no shock"
     return sc
 

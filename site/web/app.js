@@ -153,7 +153,7 @@
       const cfg = PRESETS.ei55;
       S.preset = "ei55"; S.question = cfg.q; S.label = cfg.label;
       S.shock = { keep: cfg.keep, bills: cfg.bills, oneOff: cfg.oneOff, ...NO_EXTRA };
-      $("#twist-note").hidden = true; $("#more-shock").open = false;
+      $("#twist-note").hidden = true; S.pendingTwist = null; $("#more-shock").open = false;
     }
     if (push) { const h = hashFor(id, step); if (location.hash !== h) history.pushState(null, "", h); }
     $("#switch-input").value = "";
@@ -490,38 +490,78 @@
   }
 
   // ---------------------------------------------------------------- twist card (Gemini, rule-based backup)
+  // The card is READ first and shown field by field (green = stated in the card, amber = assumed or worked out,
+  // red = not turned into a number). Nothing is calculated until the person checks it and confirms.
+  const STATUS = { read: ["ok", "From the card"], assumed: ["amber", "Assumed: please check"], none: ["", "Not in the card"] };
   async function readTwist() {
     const text = $("#twist-text").value.trim(), btn = $("#twist-go");
     if (!text) { $("#twist-text").focus(); toast("Describe your situation first."); return; }
     if (btn.classList.contains("busy")) return;
-    btn.classList.add("busy"); btn.firstElementChild.textContent = "Applying…";
+    btn.classList.add("busy"); btn.firstElementChild.textContent = "Reading…";
     const acct = S.acct;
     try {
       const t = await api("/api/twist", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ account_id: acct, text }) });
       if (S.acct !== acct) return;        // the account changed while the card was being read
-      const before = { ...S.shock, target: planFor(S.acct).target };
-      S.shock = { ...t.shock }; S.preset = "custom"; S.question = t.question || "auto";
-      S.label = t.label || "";
-      if (t.target) planFor(S.acct).target = t.target;
+      S.pendingTwist = { acct, t };
+      const val = (f) => (f.key === "target" ? (f.value ?? planFor(acct).target) : f.value);
+      const rows = t.fields.map((f) => {
+        const [cls, tag] = STATUS[f.status] || STATUS.none;
+        return `<div class="rc-row ${cls}${f.status === "none" ? " quiet" : ""}">
+          <span class="rc-dot" aria-hidden="true"></span>
+          <label for="rc-${f.key}">${esc(f.label)}<small>${esc(tag)}${f.why ? " · " + esc(f.why) : ""}</small></label>
+          <span class="rc-in">${f.unit === "$" ? "<i>$</i>" : ""}<input id="rc-${f.key}" data-key="${f.key}" type="number"
+            step="any" value="${+(+val(f)).toFixed(2)}" inputmode="decimal">${f.unit === "%" ? "<i>%</i>" : f.unit === "mo" ? "<i>mo</i>" : ""}</span>
+        </div>`;
+      }).join("");
+      const miss = (t.missing || []).map((w) => `<li>${esc(w)}</li>`).join("");
       const note = $("#twist-note");
-      note.innerHTML = esc(t.note) + (t.warn.length ? `<span class="warn">Not included in this estimate: ${esc(t.warn.join("; "))}</span>` : "");
+      note.innerHTML = `<div class="rc" role="group" aria-label="How the card was read">
+        <p class="rc-head">${esc(t.note)}</p>
+        <div class="rc-rows">${rows}</div>
+        ${miss ? `<div class="rc-miss"><b>Not turned into a number: enter by hand if it applies</b><ul>${miss}</ul></div>` : ""}
+        <div class="rc-actions"><button type="button" class="btn-primary" id="rc-go"><span>Confirm and calculate</span></button>
+          <button type="button" class="btn-ghost" id="rc-cancel">Cancel</button></div>
+        <p class="rc-foot">Nothing is calculated until you confirm. Edit any number first.</p></div>`;
       note.hidden = false;
-      const more = S.shock.extraOut || S.shock.windfall || S.shock.startIn || S.shock.lasts;
-      if (more) $("#more-shock").open = true;
-      syncControls(); simulate();
-      // glow the controls the card changed, one after another
-      const map = { keep: "#r-keep", bills: "#r-bills", oneOff: "#r-oneoff", extraOut: "#i-xout", windfall: "#i-wind",
-        startIn: "#r-start", lasts: "#r-lasts", afterPct: "#r-after", target: "#targets" };
-      let k = 0;
-      Object.entries(map).forEach(([key, sel]) => {
-        const now = key === "target" ? planFor(S.acct).target : S.shock[key];
-        if (now === before[key]) return;
-        const el = $(sel).closest(".control, .money-field") || $(sel);
-        el.classList.remove("flash"); void el.offsetWidth; el.style.setProperty("--k", k++); el.classList.add("flash");
-      });
+      $("#rc-go").addEventListener("click", confirmTwist);
+      $("#rc-cancel").addEventListener("click", () => { S.pendingTwist = null; note.hidden = true; note.innerHTML = ""; });
+      const first = note.querySelector(".rc-row.amber input") || $("#rc-go");
+      first.focus({ preventScroll: true });
+      note.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "nearest" });
     } catch (err) { toast(err.message); }
-    finally { btn.classList.remove("busy"); btn.firstElementChild.textContent = "Apply my scenario"; }
+    finally { btn.classList.remove("busy"); btn.firstElementChild.textContent = "Read my scenario"; }
+  }
+
+  function confirmTwist() {
+    const pend = S.pendingTwist;
+    if (!pend || pend.acct !== S.acct) { toast("The account changed: read the card again."); return; }
+    const t = pend.t, v = {};
+    $$("#twist-note input[data-key]").forEach((el) => { v[el.dataset.key] = Number(el.value) || 0; });
+    const clamp = (x, lo, hi) => Math.min(Math.max(x, lo), hi);
+    const before = { ...S.shock, target: planFor(S.acct).target };
+    S.shock = { keep: clamp(v.keep, 0, 150), bills: clamp(v.bills, 0, 500), oneOff: Math.max(v.oneOff, 0),
+      extraOut: v.extraOut, windfall: Math.max(v.windfall, 0), startIn: clamp(Math.round(v.startIn), 0, 12),
+      lasts: clamp(Math.round(v.lasts), 0, 24), afterPct: clamp(v.afterPct, 0, 150) };
+    S.preset = "custom"; S.question = t.question || "auto"; S.label = t.label || "";
+    if (v.target > 0) planFor(S.acct).target = clamp(Math.round(v.target), 1, 60);
+    S.preview.delete(S.acct);
+    S.pendingTwist = null;
+    const note = $("#twist-note");
+    note.innerHTML = `<p class="rc-done">✓ Confirmed and calculated. ${esc(t.note)}</p>`;
+    const more = S.shock.extraOut || S.shock.windfall || S.shock.startIn || S.shock.lasts;
+    if (more) $("#more-shock").open = true;
+    syncControls(); simulate();
+    // glow the controls the card changed, one after another
+    const map = { keep: "#r-keep", bills: "#r-bills", oneOff: "#r-oneoff", extraOut: "#i-xout", windfall: "#i-wind",
+      startIn: "#r-start", lasts: "#r-lasts", afterPct: "#r-after", target: "#targets" };
+    let k = 0;
+    Object.entries(map).forEach(([key, sel]) => {
+      const now = key === "target" ? planFor(S.acct).target : S.shock[key];
+      if (now === before[key]) return;
+      const el = $(sel).closest(".control, .money-field") || $(sel);
+      el.classList.remove("flash"); void el.offsetWidth; el.style.setProperty("--k", k++); el.classList.add("flash");
+    });
   }
 
   // ---------------------------------------------------------------- theme (circular reveal from the button)
@@ -545,6 +585,12 @@
       { duration: 620, easing: "cubic-bezier(0.22, 1, 0.36, 1)", pseudoElement: "::view-transition-new(root)" }));
   }
 
+  // With timing set, every "how long" on screen comes from the same month-by-month engine as the verdict,
+  // the needed change and the plan; with no timing it is the judges' runway (the two agree when nothing ends).
+  const mbm = (o) => (o == null ? "Doesn't run out" : `${o.toFixed(1)} months`);
+  const shockText = (s) => (s.timed ? mbm(s.timed.out) : s.after.headline);
+  const planText = (s) => (s.timed ? mbm(s.timed.plan_out) : s.planned.headline);
+  const previewText = (s) => (s.timed ? mbm(s.timed.preview_out) : s.preview && s.preview.headline);
   const isRisk = (r) => r.status === "buffer_gone" || r.status === "shortfall";
   function renderRunway(el, r) {
     if (r.status === "shortfall") roll(el, r.raw, (v) => `${v.toFixed(1)} months`, r.headline);
@@ -587,8 +633,11 @@
       tm.hidden = false;
     } else tm.hidden = true;
     swapText($("#cmp-today"), b.headline);
-    swapText($("#cmp-shock"), a.headline);
-    swapText($("#cmp-plan"), s.plan_active ? pl.headline : s.preview ? `Preview: ${s.preview.headline}` : "No changes yet");
+    swapText($("#cmp-shock"), shockText(s));
+    swapText($("#cmp-plan"), s.plan_active ? planText(s) : s.preview ? `Preview: ${previewText(s)}` : "No changes yet");
+    $("#runway-label").textContent = s.timed ? "How long the cushion lasts · if the change never ended (judges' runway)"
+      : "How long the cushion lasts · with this shock";
+    $(".hero-compare").setAttribute("data-basis", s.timed ? "month by month" : "");
     $("#cmp-plan").classList.toggle("empty", !s.plan_active);
     // a preview belongs to one plan amount; if the shock or target changed that amount, drop the stale preview
     const pv = S.preview.get(S.acct);
@@ -728,6 +777,8 @@
     const box = $("#traj"), sim = S.sim, s = sim.projection, n = s.months.length - 1;
     const showPlan = !!sim.plan_active || !!sim.preview;
     $("#lg-timed").hidden = !s.timed;
+    { const li = $(".lg-shock").parentElement;           // with timing, this line is the never-ending case
+      li.lastChild.textContent = s.timed ? "If it never ended" : "With this shock"; }
     $(".lg-plan").parentElement.style.opacity = showPlan ? 1 : .4;
     if (!box.clientWidth) { T.dirty = true; return; }   // dashboard hidden: draw at the real size when it shows
     T.dirty = false;
@@ -829,8 +880,8 @@
       const i = Math.max(0, Math.min(n, Math.round(((x - m.l) / (W - m.l - m.r)) * n)));
       hv.setAttribute("x1", X(i)); hv.setAttribute("x2", X(i)); hv.setAttribute("visibility", "visible");
       tip.innerHTML = `<b>Month ${i}</b><div class="row"><span>Today</span><span>${money(s.today[i])}</span></div>
-        <div class="row"><span>With this shock</span><span>${money(s.shock[i])}</span></div>
-        ${showPlan ? `<div class="row"><span>With your plan</span><span>${money(s.plan[i])}</span></div>` : ""}
+        <div class="row"><span>${s.timed ? "If it never ended" : "With this shock"}</span><span>${money(s.shock[i])}</span></div>
+        ${showPlan ? `<div class="row"><span>${sim.plan_active ? "With your plan" : "Preview (not confirmed)"}</span><span>${money(planLine[i])}</span></div>` : ""}
         ${s.timed ? `<div class="row"><span>Month by month</span><span>${money(s.timed[i])}</span></div>` : ""}`;
       const px = (X(i) / W) * rect.width;
       tip.style.left = Math.min(Math.max(px + 14, 0), rect.width - 180) + "px"; tip.style.top = "8px"; tip.style.opacity = 1;
@@ -909,10 +960,10 @@
     const on = isApplied(pl), pv = isPreview(pl), s = S.sim;
     if (on) {
       return `<div class="apply-row"><button type="button" class="apply-btn on" data-apply="${esc(key)}">✓ Confirmed · in the plan</button>
-        <span class="apply-result">${esc(s.after.headline)} → <b>${esc(s.planned.headline)}</b> with ${esc(pl.apply.label)}</span></div>
+        <span class="apply-result">${esc(shockText(s))} → <b>${esc(planText(s))}</b> with ${esc(pl.apply.label)}${s.timed ? " (month by month)" : ""}</span></div>
         <p class="apply-note">The customer confirmed this cut, so it counts in the plan. Click to remove it.</p>`;
     }
-    const result = pv && s.preview ? `<span class="apply-result">${esc(s.after.headline)} → <b>${esc(s.preview.headline)}</b> with ${esc(pl.apply.label)} (preview)</span>` : "";
+    const result = pv && s.preview ? `<span class="apply-result">${esc(shockText(s))} → <b>${esc(previewText(s))}</b> with ${esc(pl.apply.label)} (preview${s.timed ? ", month by month" : ""})</span>` : "";
     return `<div class="apply-row"><button type="button" class="apply-btn${pv ? " on" : ""}" data-apply="${esc(key)}">
       ${pv ? "✓ Previewing on the chart" : "Preview this cut on the chart"}</button>
       ${pv ? `<button type="button" class="apply-btn" data-confirm="${esc(key)}">Customer confirms this cut</button>` : ""}${result}</div>
@@ -977,6 +1028,7 @@
       return `<li class="plan-card k-${pl.kind} lv-${lv}${i === 0 ? " is-top" : ""}" data-key="${esc(key)}" style="--i:${i}">
         <div class="plan-rank" aria-hidden="true">${bars(lv)}<span class="plan-num">${word}</span><span class="plan-cap">${cap}</span></div>
         <div class="plan-body">
+          <p class="plan-when w-${pl.when}">${pl.when === "if_shock" ? "If the shock hits · on the income after it" : "Now, before any shock · on today's income"}</p>
           <p class="plan-tag">${esc(tag)}</p>
           <h3 class="plan-title"><span class="sr-only">${word} priority: </span>${esc(pl.title)}</h3>
           <p class="plan-do">${boldNums(pl.do)}</p>

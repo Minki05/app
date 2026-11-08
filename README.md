@@ -22,7 +22,9 @@ Everything works without an AI key. To let Gemini read twist cards and rewrite t
 GEMINI_API_KEY = "your-key-from-aistudio.google.com"
 GEMINI_MODEL = "gemini-3.7-flash,gemini-3.5-flash-lite,gemini-3.8-flash"   # tried in order
 ```
-Gemini reads the card, then a rule-based reader checks it and fills in anything Gemini missed (shown on screen).
+Gemini reads the card, then a rule-based reader checks it and fills in anything Gemini missed. The reading is shown
+field by field (green = stated in the card, amber = assumed or worked out, with the reason; red = not turned into a
+number) and nothing is calculated until the person edits or confirms it ("Confirm and calculate").
 If Gemini is unavailable, the rule-based reader and a template message take over. Gemini never calculates numbers.
 
 ## Files
@@ -35,13 +37,17 @@ If Gemini is unavailable, the rule-based reader and a template message take over
 - `discovery.py` — reproduces every finding from the raw data (output in `discovery_output.txt`)
 - `check.py` — 61 automated checks: judges' example answers, twist-card phrasings, regression and statistical tests
 - `site/check_web.py` — 128 checks through the real web server and page
-- `site/check_guardrails.py` — 87 demo guardrails, run with AI switched off: screens agree after a plan is applied,
-  increase vs decrease is read correctly, no action is claimed to cause lower risk, only confirmed cuts count,
-  unsaved money never counts as cash, AUC is described as ranking on a hold-out (not accuracy)
+- `site/check_guardrails.py` — 112 demo guardrails, run with AI switched off, including 250 random accounts x
+  random scenarios (with and without timing) where every output must reach the same conclusion: verdict, shortfall,
+  monthly change needed, plan result, guide, message and chart. `RR_N=1500 RR_SEED=7` runs more.
 - `app.py` — backup Streamlit front end on the same `core.py`
 
 ## Method
 - Runway numbers follow the judges' definitions exactly (checked against the README examples).
+- A shock with timing (starts later, ends after N months) is answered by one month-by-month engine for every figure
+  on screen; with no timing that engine and the judges' runway agree, so the judges' number is used as is.
+- Plans are labelled by when they apply: "now, on today's income" (e.g. building the emergency fund) or "if the
+  shock hits, on the income after it".
 - Evidence: features from each account's past; outcome = balance below zero in the next 12 months
   (3,660 accounts with 24+ months). Replicated on loan default using pre-loan data only (682 loans).
 - Risk model: logistic regression on savings (months of spending), no transfers with other banks, past negative

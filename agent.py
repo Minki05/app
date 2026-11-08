@@ -98,7 +98,7 @@ def short_error():
 # 1. Read a twist card
 # ---------------------------------------------------------------------
 EMPTY = dict(job_loss=False, ei_pct=None, other_income_change_pct=0.0, bills_up_pct=0.0,
-             extra_monthly_dollars=0.0, spending_change_pct=0.0, one_off_dollars=0.0,
+             extra_monthly_dollars=0.0, extra_income_dollars=0.0, spending_change_pct=0.0, one_off_dollars=0.0,
              one_off_months_of_spending=0.0, windfall_dollars=0.0, starts_in_months=0, shock_lasts_months=0,
              income_after_pct=100.0, survive_months=None, question="auto", unsupported=[])
 QUESTIONS = ("auto", "can_pay", "last_months", "how_long")
@@ -141,6 +141,16 @@ def _ei_state(t, m):
 
 CATEGORY = (r"groceries|grocery bills?|food(?: costs?| prices?)?|gas(?: prices?)?|fuel|gasoline|transit|"
             r"phone bills?|childcare|daycare|insurance(?: premiums?)?|car insurance")
+
+
+NEG = r"\b(?:not|never|no|won't|doesn't|don't|didn't|isn't|aren't|wouldn't|without)\b|n't\b"
+
+
+def negated_at(t, m, back=30):
+    """True when the matched change is denied ("does not increase by 10%", "no rent increase"). Only the same
+    clause counts: "I did not lose my job. My rent goes up 10%" is a real rent rise."""
+    before = re.split(r"[.;!?]|\b(?:and|but|while|so)\b", t[max(m.start() - back, 0):m.start()])[-1]
+    return bool(re.search(NEG, before + " " + m.group(0)))
 
 
 def category_warning(cat, pct):
@@ -194,7 +204,13 @@ def parse_rules(text):
                   r"[^.%\d]{0,15}" + PCT, t) or \
         re.search(PCT + r"\s+(?:pay|salary|wage|income|hours)\s+cut", t) or \
         re.search(r"(?:cut|reduce)s?\s+(?:[\w']+\s+){0,2}(?:pay|salary|hours|income|wages?)\s+by\s+" + PCT, t)
-    if m:
+    to_m = re.search(r"(?:pay|salary|wages?|hours|income|earnings)\s+(?:is\s+|are\s+)?(?:cut|drops?|falls?|reduced|goes down|"
+                     r"go down|goes|go)\s+to\s+" + PCT, t)
+    if to_m and not negated_at(t, to_m):         # "drops TO 70%" = 70% remains, a 30% drop
+        out["other_income_change_pct"] = float(to_m.group(1)) - 100.0
+    elif m and negated_at(t, m):
+        out["unsupported"].append(f"'{m.group(0).strip()}' is stated as NOT happening, so it was not applied")
+    elif m:
         out["other_income_change_pct"] = -float(m.group(1))
     elif not out["job_loss"] and re.search(r"(?:income|pay|paycheque|paycheck|earnings)s?\s+(?:drops?|falls?|goes|go|is cut)"
                                            r"\s+to\s+(?:zero|nothing|\$?0)\b|\bno income\b|\bzero income\b", t):
@@ -206,11 +222,21 @@ def parse_rules(text):
     if re.search(r"\b(?:partner|spouse|husband|wife)\b", t) and \
             job_loss_mentions(text, r"laid off|lay-?off|loses?\s+\w+\s+job|lost\s+\w+\s+job|fired|out of work|unemploy")[0]:
         m = re.search(r"(?:earn|earns|earned|brings? in|makes?)\s+" + PCT, t)
-        if m:
-            out["other_income_change_pct"] = -float(m.group(1))
-        else:
-            out["other_income_change_pct"] = -50.0
+        share = float(m.group(1)) if m else 50.0
+        if not m:
             out["unsupported"].append("partner's share of income not given: assumed half (adjust the slider)")
+        ei = out["ei_pct"] if out["ei_pct"] is not None else 0.0
+        # household keeps (100 - share)% plus EI on the partner's share: 60% + 40% x 55% = 82%
+        out["other_income_change_pct"] = -share * (1 - ei / 100.0)
+        out["job_loss"], out["ei_pct"] = False, None
+        if ei:
+            out["unsupported"].append(f"partner's EI ({ei:g}% of their {share:g}% share) counted: household keeps "
+                                      f"{100 - share * (1 - ei / 100):g}% of usual money in")
+    # --- one category of spending (groceries, gas...): the data has no per-category amounts, so a % of it can't be
+    # turned into dollars. Checked BEFORE bills, so "grocery bills up 10%" is not read as household bills.
+    for m in re.finditer(r"\b(" + CATEGORY + r")\b[^.%\d]{0,30}" + PCT, t):
+        out["unsupported"].append(category_warning(m.group(1), m.group(2)))
+        t = t.replace(m.group(0), " ")
     # --- bills / rent
     m = re.search(r"(?:bills?|rent|utilit\w*|hydro|heating)[^.%]{0,40}?(?:up|rise|rises|increase|increases|jump|jumps|"
                   r"go up|goes up|climb|climbs)[^.%\d]{0,15}" + PCT, t) or \
@@ -218,16 +244,17 @@ def parse_rules(text):
         re.search(r"(?:raises?|increases?|hikes?|ups?)\s+(?:the\s+|their\s+|your\s+)?(?:rent|bills?|utilit\w*)"
                   r"[^.%\d]{0,15}" + PCT, t)
     t_wo_bills = t
-    if m:
+    if m and negated_at(t, m):
+        out["unsupported"].append(f"'{m.group(0).strip()}' is stated as NOT happening, so it was not applied")
+        t_wo_bills = t.replace(m.group(0), " ")
+    elif m:
         out["bills_up_pct"] = float(m.group(1))
         t_wo_bills = t.replace(m.group(0), " ")
     # --- general spending change (inflation, prices)
-    # one category of spending (groceries, gas...): the data has no per-category amounts, so a % of it can't be
-    # turned into dollars. Flag it instead of applying it to all spending.
-    for m in re.finditer(r"\b(" + CATEGORY + r")\b[^.%\d]{0,30}" + PCT, t_wo_bills):
-        out["unsupported"].append(category_warning(m.group(1), m.group(2)))
-        t_wo_bills = t_wo_bills.replace(m.group(0), " ")
     m = re.search(r"(?:prices?|cost of living|inflation|spending)[^.%\d]{0,30}" + PCT, t_wo_bills)
+    if m and negated_at(t_wo_bills, m):
+        out["unsupported"].append(f"'{m.group(0).strip()}' is stated as NOT happening, so it was not applied")
+        m = None
     if m:
         # direction: "decreases / drops / falls ... by 10%" after the word, or "cut / reduce ... spending" right
         # before it, is a decrease; anything else is an increase
@@ -262,7 +289,19 @@ def parse_rules(text):
             out["income_after_pct"] = 100.0 if back else 0.0
     # --- recurring new monthly costs ($X a month)
     for m in re.finditer(r"\$\s?(\d+(?:\.\d+)?)\s*(k|thousand)?\s*" + MONTHLY, t):
-        out["extra_monthly_dollars"] += float(m.group(1)) * (1000 if m.group(2) else 1)
+        amt = float(m.group(1)) * (1000 if m.group(2) else 1)
+        before = t[max(m.start() - 45, 0):m.start()]
+        clause = re.split(r"[.;!?]|\band\b", before)[-1]          # only the words in the same clause
+        if re.search(NEG, clause):
+            out["unsupported"].append(f"'{clause.strip()} ${amt:,.0f} a month' is stated as NOT happening: not applied")
+        elif re.search(r"income|pay\b|salary|wages?|earn|side (?:job|gig|hustle)|raise|benefit|child benefit|"
+                       r"pension|rental income|money in", clause):
+            sign = -1 if re.search(r"decreas|drop|fall|fell|down|lower|reduc|cut|less|lose|loses|lost", clause) else 1
+            out["extra_income_dollars"] += sign * amt
+        elif re.search(r"decreas|drop|fall|fell|down|lower|reduc|cut|less|cheaper|sav(?:e|es|ing)", clause):
+            out["extra_monthly_dollars"] -= amt
+        else:
+            out["extra_monthly_dollars"] += amt
     t_wo_monthly = re.sub(r"\$\s?\d+(?:\.\d+)?\s*(?:k|thousand)?\s*" + MONTHLY, " ", t)
     # --- one-off costs
     m = re.search(NUM + r"\s+(?:full\s+)?months?\s*(?:'s|’s)?\s+(?:worth\s+)?of\s+(?:their\s+|his\s+|her\s+|your\s+)?"
@@ -287,7 +326,7 @@ def parse_rules(text):
         out["unsupported"].append("interest-rate change: the data can't split loan interest from principal, "
                                   "so enter the higher monthly payment under 'New monthly costs'")
     found = any(out[k] for k in ("job_loss", "other_income_change_pct", "bills_up_pct", "spending_change_pct",
-                                 "extra_monthly_dollars", "one_off_dollars", "one_off_months_of_spending",
+                                 "extra_monthly_dollars", "extra_income_dollars", "one_off_dollars", "one_off_months_of_spending",
                                  "windfall_dollars"))
     if not found and not out["unsupported"]:
         out["unsupported"].append("no shock the engine can model was found in this card")
@@ -311,7 +350,8 @@ def _clean(d):
         out["ei_pct"] = 0.0
     out["other_income_change_pct"] = num(d.get("other_income_change_pct"), -100, 100)
     out["bills_up_pct"] = num(d.get("bills_up_pct"), 0, 300)
-    out["extra_monthly_dollars"] = num(d.get("extra_monthly_dollars"), 0, 1e6)
+    out["extra_monthly_dollars"] = num(d.get("extra_monthly_dollars"), -1e6, 1e6)
+    out["extra_income_dollars"] = num(d.get("extra_income_dollars"), -1e6, 1e6)
     out["spending_change_pct"] = num(d.get("spending_change_pct"), -90, 300)
     out["one_off_dollars"] = num(d.get("one_off_dollars"), 0, 1e7)
     out["one_off_months_of_spending"] = num(d.get("one_off_months_of_spending"), 0, 24)
@@ -335,7 +375,9 @@ Return ONLY a JSON object with exactly these keys:
   given, use -50 and add "partner's share of income assumed to be half" to unsupported);
   a higher loan/mortgage payment of $X goes in extra_monthly_dollars; 0 if none
 - bills_up_pct: % increase in household bills, rent or utilities; 0 if none
-- extra_monthly_dollars: NEW recurring costs per month in dollars (e.g. childcare $800/month -> 800); 0 if none
+- extra_monthly_dollars: change in recurring costs per month in dollars (childcare $800/month -> 800; rent decreases by $200 a month -> -200); 0 if none
+- extra_income_dollars: change in recurring money IN per month in dollars (income increases by $500 a month -> 500); 0 if none
+- A change the card says does NOT happen ("spending does not increase") is not applied: leave it at 0
 - spending_change_pct: % change in overall spending, negative for a decrease (prices up 5% -> 5, spending decreases 10% -> -10); 0 if none. A change to ONE category only (groceries, gas, childcare...) is NOT overall spending: use 0 and add it to unsupported
 - one_off_dollars: total one-time costs in dollars (repairs, bills, emergencies); 0 if none
 - one_off_months_of_spending: one-time cost stated as months of typical spending (e.g. "a full month" -> 1); 0 if none
@@ -376,7 +418,7 @@ Card: "Their hours get cut by a quarter and daycare adds $650 a month. How long 
 Card: \"\"\"{card}\"\"\""""
 
 
-CROSS_CHECK = ("other_income_change_pct", "bills_up_pct", "extra_monthly_dollars", "spending_change_pct",
+CROSS_CHECK = ("extra_income_dollars", "other_income_change_pct", "bills_up_pct", "extra_monthly_dollars", "spending_change_pct",
                "one_off_dollars", "one_off_months_of_spending", "windfall_dollars")
 ADDED = []          # what the rule check filled in on the last Gemini read (shown on screen)
 
@@ -412,6 +454,15 @@ def parse_twist(text):
                 d["job_loss"], d["ei_pct"] = False, None
                 d["unsupported"].append("the card says there was no job loss, so none was applied; "
                                         "lower the money-in setting by hand if it applies")
+            if re.search(r"\b(?:partner|spouse|husband|wife)\b", text.lower()) and not r["job_loss"] and \
+                    r["other_income_change_pct"] and d["job_loss"]:
+                d["job_loss"], d["ei_pct"] = False, None
+                d["other_income_change_pct"] = r["other_income_change_pct"]
+                d["unsupported"] += [u for u in r["unsupported"] if u.startswith("partner")]
+            for k in ("spending_change_pct", "bills_up_pct", "other_income_change_pct"):
+                if any("NOT happening" in u for u in r["unsupported"]) and not r[k] and d[k]:
+                    d[k] = 0.0
+            d["unsupported"] += [u for u in r["unsupported"] if "NOT happening" in u and u not in d["unsupported"]]
             cats = [m for m in re.finditer(r"\b(" + CATEGORY + r")\b[^.%\d]{0,30}" + PCT, text.lower())]
             general = re.search(r"prices?|cost of living|inflation|spending", re.sub(
                 r"\b(?:" + CATEGORY + r")\b", " ", text.lower()))
@@ -438,7 +489,11 @@ def describe(params):
     if params["spending_change_pct"]:
         parts.append(f"spending {params['spending_change_pct']:+g}%")
     if params["extra_monthly_dollars"]:
-        parts.append(f"new costs ${params['extra_monthly_dollars']:,.0f}/month")
+        x = params["extra_monthly_dollars"]
+        parts.append(f"monthly costs {'+' if x > 0 else '-'}${abs(x):,.0f}/month")
+    if params.get("extra_income_dollars"):
+        x = params["extra_income_dollars"]
+        parts.append(f"money in {'+' if x > 0 else '-'}${abs(x):,.0f}/month")
     if params["one_off_dollars"]:
         parts.append(f"one-off cost ${params['one_off_dollars']:,.0f}")
     if params["one_off_months_of_spending"]:
@@ -499,8 +554,8 @@ def template_message(facts):
     elif isinstance(r, str):
         lines.append("Good news: your money coming in would still cover your usual spending.")
     elif facts.get("meets_target") is None:
-        short = "short of" if r < facts["survive"] else "meeting"
-        lines.append(f"Your savings would last about {r} months, {short} the goal of {facts['survive']} months.")
+        lines.append(f"Your savings would last about {_months(facts)} months, "
+                     f"{'meeting' if _meets(facts) else 'short of'} the goal of {facts['survive']} months.")
     else:
         lines.append(f"If the change never ended, your savings would last about {r} months.")
     mbm = facts.get("month_by_month")
@@ -518,6 +573,19 @@ def template_message(facts):
             lines.append(f"{i}. {step} {bank_offer(bank)}")
     lines.append("We're here to help you set any of this up.")
     return "\n".join(lines)
+
+
+def _meets(facts):
+    """The same verdict the screen shows (unrounded), never re-derived from a rounded number."""
+    return facts["meets"] if facts.get("meets") is not None else facts["runway_after"] >= facts["survive"]
+
+
+def _months(facts):
+    """Rounded months, unless rounding would hide the verdict (5.96 shown as '6.0' but short of 6): then 2 decimals."""
+    r, raw = facts["runway_after"], facts.get("runway_after_raw")
+    if raw is not None and not _meets(facts) and r >= facts["survive"]:
+        return f"{raw:.2f}"
+    return r
 
 
 def _plan_line(facts):
@@ -553,8 +621,8 @@ def write_message(facts):
     elif facts.get("meets_target") is not None:
         outlook = f"If the change never ended, savings would last about {r} months."
     else:
-        verdict = "which is shorter than" if r < facts["survive"] else "which meets"
-        outlook = (f"After the shock, savings would last about {r} months, {verdict} "
+        verdict = "which meets" if _meets(facts) else "which is shorter than"
+        outlook = (f"After the shock, savings would last about {_months(facts)} months, {verdict} "
                    f"the goal of lasting {facts['survive']} months.")
     now = facts["runway_now"]
     today = ("Today, money coming in covers usual spending." if isinstance(now, str) else

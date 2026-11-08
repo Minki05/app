@@ -179,5 +179,108 @@ check("twist card read with no AI (rule-based reader)", t["source"] != "Gemini" 
 d = S.simulate(dict(account_id=20111, keep=55, target=6))
 check("customer message written with no AI (template)", d["message"].startswith("Hi"), d["message"][:60])
 
+print("\n8) Random accounts x random scenarios: every output for one scenario reaches the same conclusion")
+import numpy as np  # noqa: E402
+rng = np.random.default_rng(int(os.environ.get("RR_SEED", 2026)))
+ids = list(S.prof.index)
+problems = {k: [] for k in ("verdict", "need", "confirm", "message", "guide", "chart", "preview")}
+N = int(os.environ.get("RR_N", 250))
+for i in range(N):
+    acc = int(rng.choice(ids))
+    q = dict(account_id=acc, keep=int(rng.choice([0, 25, 55, 70, 100])), bills_pct=int(rng.choice([0, 0, 15, 30])),
+             one_off=float(rng.choice([0, 0, 0, 2000, 8000])), target=int(rng.integers(1, 13)))
+    if rng.random() < 0.5:                                # half the scenarios have timing
+        q.update(start_in=int(rng.integers(0, 4)), lasts=int(rng.integers(1, 9)),
+                 after_pct=float(rng.choice([0, 55, 100])))
+    d = S.simulate(q)
+    tag = f"{acc} {q}"
+    # verdict and shortfall agree
+    if d["lasts"] != (d["short_by"] == 0):
+        problems["verdict"].append(tag)
+    # the monthly change needed is 0 exactly when the target is met (timed: same engine)
+    if d["need"] is not None and d["timed"] is not None and (d["need"] <= 0) != d["lasts"]:
+        problems["need"].append(tag)
+    # the message states the same verdict as the screen
+    m = d["message"]
+    if not d["can_pay"] and d["after"]["status"] in ("shortfall", "capped"):
+        says_meets = "meeting the goal" in m.split("\n")[1 if not d["timed"] else 2]
+        if says_meets != d["lasts"]:
+            problems["message"].append(tag + " | " + m.split("\n")[1][:90])
+    # confirming exactly the needed change reaches the target, by the same engine
+    if d["need"] and d["need"] > 0:
+        d2 = S.simulate({**q, "checked": True, "cut": math.ceil(d["need"])})
+        ok_plan = (d2["timed"]["plan_lasts"] if d2["timed"] else
+                   d2["planned"]["status"] in ("no_shortfall", "capped") or
+                   (d2["planned"]["status"] == "shortfall" and d2["planned"]["raw"] >= q["target"]))
+        cut_applied = d2["applied_cut"] >= math.ceil(d["need"]) - 0.5
+        if cut_applied and not ok_plan:
+            problems["confirm"].append(tag)
+        if cut_applied and (d2["remaining"] or 0) > 0.5:
+            problems["confirm"].append(tag + " remaining>0")
+        # what the guide/backup say is still needed matches the number on screen
+        if (d2["remaining"] or 0) > 0.5 and money(d2["remaining"]) not in texts(d2):
+            problems["guide"].append(tag)
+        if "meeting the goal" not in d2["message"] and cut_applied and ok_plan and "With the change you confirmed" in d2["message"]:
+            problems["message"].append(tag + " (plan line)")
+        # a preview never counts
+        d3 = S.simulate({**q, "preview_cut": math.ceil(d["need"])})
+        if d3["confirmed"] != 0 or d3["plan_active"] or d3["remaining"] != d["remaining"]:
+            problems["preview"].append(tag)
+    # the chart line drawn for the shock runs out where the screen says
+    if d["timed"] and d["timed"]["out"] is not None:
+        path = d["timed"]["path"]
+        neg = next((k for k, v in enumerate(path) if v is not None and v < 0), None)
+        o = d["timed"]["out"]
+        if neg is not None and not (math.floor(o) <= neg <= math.ceil(o) + 1):
+            problems["chart"].append(tag)
+for k, v in problems.items():
+    check(f"{N} random scenarios: {k} consistent", not v, v[:3])
+
+print("\n9) Same meaning, different words: the same reading (or the same warning)")
+GROUPS = [
+    ("income to 70% / by 30%", "keep", 70.0, ["My income drops to 70% of normal.", "My pay is cut by 30%.",
+                                             "My income falls by 30%."]),
+    ("rent down $200", "extraOut", -200, ["My rent decreases by $200 a month.", "My rent goes down $200 a month."]),
+    ("income up $500", "keep_gt_100", True, ["My income increases by $500 a month.",
+                                              "I get a side job that pays $500 a month."]),
+    ("spending +10%", "extraOut_pos", True, ["My spending goes up 10%.", "Spending increases by 10%."]),
+    ("not happening", "nochange", True, ["My spending does not increase by 10%.", "My rent doesn't go up 10%."]),
+    ("grocery only", "nochange", True, ["My groceries increase by 10%.", "My grocery bills increase by 10%."]),
+    ("partner 40% + EI 55%", "keep", 82.0, ["My partner earns 40% of our income and loses their job. "
+                                            "EI replaces 55% of their pay."]),
+]
+P20111 = S.prof.loc[20111]
+for name, key, want, sentences in GROUPS:
+    for text in sentences:
+        t = S.twist(dict(account_id=20111, text=text))
+        sh = t["shock"]
+        if key == "keep":
+            ok = abs(sh["keep"] - want) < 0.2
+        elif key == "extraOut":
+            ok = sh["extraOut"] == want
+        elif key == "keep_gt_100":
+            ok = sh["keep"] > 100 and sh["extraOut"] == 0
+        elif key == "extraOut_pos":
+            ok = sh["extraOut"] > 0 and sh["bills"] == 0
+        else:   # nothing applied, and the person is told why
+            ok = sh["extraOut"] == 0 and sh["bills"] == 0 and sh["keep"] == 100 and bool(t["missing"])
+        check(f"[{name}] {text!r}", ok, (sh, t["missing"]))
+    # the confirm card shows every field, with a status for each
+t = S.twist(dict(account_id=20111, text="I lose my job and get EI."))
+f = {x["key"]: x for x in t["fields"]}
+check("confirm card: an EI share not in the card is marked 'assumed' with the reason",
+      f["keep"]["status"] == "assumed" and "assum" in f["keep"]["why"], f["keep"])
+check("confirm card: reading a card changes nothing until confirmed (the page code never sets the shock on read)",
+      "S.shock =" not in JS[JS.index("async function readTwist"):JS.index("function confirmTwist")]
+      and "S.shock =" in JS[JS.index("function confirmTwist"):JS.index("function confirmTwist") + 3000])
+
+print("\n10) Plans say WHEN they apply: now (today's income) or if the shock hits (income after it)")
+d = S.simulate(dict(account_id=20111, keep=55, target=6))
+fund = [p for p in d["plans"] if p["title"].startswith("Build an emergency fund")]
+shockp = [p for p in d["plans"] if p["title"].startswith("Shock plan")]
+check("emergency fund is a 'now' plan and says it uses today's income",
+      fund and fund[0]["when"] == "now" and fund[0]["do"].startswith("Before any shock, on today's income"), fund[:1])
+check("shock plan is an 'if the shock hits' plan", shockp and shockp[0]["when"] == "if_shock", shockp[:1])
+
 print(f"\nResult: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)
