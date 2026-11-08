@@ -560,7 +560,10 @@
     const no = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v6M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>';
     const cp = s.can_pay, src = cp && cp.windfall ? `savings + the ${money(cp.windfall)} coming in` : "savings";
     if (s.question === "can_pay" && cp) {
-      if (cp.left > 0) { v.className = "verdict yes"; v.innerHTML = `${ok}Can pay the ${money(cp.cost)} from ${src} · ${money(cp.left)} left`; }
+      // can pay vs cash left are separate answers from the server (cost == savings: can pay, nothing left)
+      const canPay = cp.can_pay ?? cp.left >= 0, cashLeft = cp.cash_left ?? cp.left > 0;
+      if (canPay && cashLeft) { v.className = "verdict yes"; v.innerHTML = `${ok}Can pay the ${money(cp.cost)} from ${src} · ${cp.left < 0.5 ? "under $1" : money(cp.left)} left`; }
+      else if (canPay) { v.className = "verdict yes"; v.innerHTML = `${ok}Can pay the ${money(cp.cost)} from ${src} · no cash left after`; }
       else { v.className = "verdict no"; v.innerHTML = `${no}${src[0].toUpperCase() + src.slice(1)} (${money(cp.have)}) can't cover ${money(cp.cost)} · ${money(-cp.left)} short`; }
     } else if (s.question === "how_long") {
       v.className = "verdict " + (s.lasts ? "yes" : "no");

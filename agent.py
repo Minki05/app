@@ -106,15 +106,36 @@ PCT = r"(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)"
 MONTHLY = r"(?:/\s*mo(?:nth)?|per month|a month|each month|every month|monthly)"
 
 
+_POSS = r"(?:their|his|her|the|a|your|my|our)"
+JOB_LOSS = (r"laid off|lay-?off|(?:lose|lost|loses) " + _POSS + r" jobs?|"
+            r"job loss|unemploy|fired|out of work|lose work")
+# "did not / didn't / haven't / was not / never / no longer" right before the phrase, in the same clause
+NEGATION = re.compile(r"(?:\bnot\b|n't\b|\bnever\b|\bno longer\b)(?:\s+[\w']+){0,3}\s*$")
+
+
+def job_loss_mentions(text, pattern=JOB_LOSS):
+    """(affirmed, negated): whether the text states a job loss, and whether it explicitly denies one.
+    "I did not lose my job. My rent goes up 10%." -> (False, True): only that phrase is dropped, the rent
+    rise in the next sentence is still read by the other rules."""
+    t = " " + str(text).lower().replace(",", "") + " "
+    affirmed = negated = False
+    for m in re.finditer(pattern, t):
+        clause = re.split(r"[.;:!?]|\bbut\b|\band\b", t[:m.start()])[-1]
+        if NEGATION.search(clause):
+            negated = True
+        else:
+            affirmed = True
+    return affirmed, negated
+
+
 def parse_rules(text):
     """Backup reader: regular expressions for the common ways a twist card is phrased."""
     t = " " + text.lower().replace(",", "") + " "
     out = dict(EMPTY, unsupported=[])
     # --- job loss + EI   (customers write in the first person too: my / our / I / we)
-    poss = r"(?:their|his|her|the|a|your|my|our)"
+    poss = _POSS
     partner = re.search(r"\b(?:partner|spouse|husband|wife)\b", t)
-    if re.search(r"laid off|lay-?off|(?:lose|lost|loses) " + poss + r" jobs?|"
-                 r"job loss|unemploy|fired|out of work|lose work", t) and not partner:
+    if job_loss_mentions(text)[0] and not partner:
         out["job_loss"] = True
     # "55% of my pay" names the share directly, so it wins; "EI ... 55%" must stay inside one sentence,
     # otherwise "... from EI. My rent goes up 15%" would read the rent rise as the EI share.
@@ -140,7 +161,7 @@ def parse_rules(text):
     if m:
         out["other_income_change_pct"] = float(m.group(1))
     if re.search(r"\b(?:partner|spouse|husband|wife)\b", t) and \
-            re.search(r"laid off|lay-?off|loses?\s+\w+\s+job|lost\s+\w+\s+job|fired|out of work|unemploy", t):
+            job_loss_mentions(text, r"laid off|lay-?off|loses?\s+\w+\s+job|lost\s+\w+\s+job|fired|out of work|unemploy")[0]:
         m = re.search(r"(?:earn|earns|earned|brings? in|makes?)\s+" + PCT, t)
         if m:
             out["other_income_change_pct"] = -float(m.group(1))
@@ -320,9 +341,20 @@ def parse_twist(text):
             d = None
         if d is not None:
             r = parse_rules(text)
+            affirmed, negated = job_loss_mentions(text)
+            unclear = ("job loss unclear (the card both states and denies one): not applied, "
+                       "lower the money-in setting by hand if it applies")
             if r["job_loss"] and not d["job_loss"]:
-                d["job_loss"], d["ei_pct"] = True, r["ei_pct"]
-                ADDED.append(f"job loss with EI at {r['ei_pct']:g}%")
+                if negated:                      # conflicting phrases: surface it, don't pick a side as fact
+                    d["unsupported"].append(unclear)
+                else:                            # a clearly stated job loss Gemini missed
+                    d["job_loss"], d["ei_pct"] = True, r["ei_pct"]
+                    ADDED.append(f"job loss with EI at {r['ei_pct']:g}%")
+            elif d["job_loss"] and negated and not affirmed:
+                # the card explicitly denies a job loss and never states one: don't apply it as a fact
+                d["job_loss"], d["ei_pct"] = False, None
+                d["unsupported"].append("the card says there was no job loss, so none was applied; "
+                                        "lower the money-in setting by hand if it applies")
             for k in CROSS_CHECK:
                 if r[k] and not d[k]:
                     d[k] = r[k]
@@ -365,14 +397,41 @@ def describe(params):
 # ---------------------------------------------------------------------
 # 2. Write a message to the customer
 # ---------------------------------------------------------------------
+def bank_offer(bank):
+    """A bank step as something to ask about, never as an approval or a promise: there is no approval
+    system behind this app, so "Tangerine could X" becomes "Ask us whether we can X"."""
+    bank = str(bank or "").strip()
+    if bank.startswith("Tangerine could "):
+        return "Ask us whether we can " + bank[len("Tangerine could "):]
+    return bank
+
+
+def _can_pay(facts):
+    """(can pay?, cash left after paying) from the unrounded engine values when the caller passed them
+    (web app); older callers (app.py) only pass the rounded display amounts."""
+    left = facts["left"] if facts.get("left") is not None else facts["buffer"] - facts["one_off"]
+    can = facts["can_pay"] if facts.get("can_pay") is not None else left >= 0
+    return bool(can), float(left)
+
+
+def _dollars(x):
+    """Whole-dollar display; amounts under $1 are said as such so a rounded "$0" never hides a real gap."""
+    return "less than $1" if 0 < abs(x) < 0.5 else f"${abs(x):,.0f}"
+
+
 def template_message(facts):
     lines = [f"Hi there! We looked at how your account would handle {facts['shock']}."]
     r = facts["runway_after"]
     if facts.get("one_off_only"):
-        left = facts["buffer"] - facts["one_off"]
-        lines.append(f"You can pay the ${facts['one_off']:,} cost from savings and still have ${left:,} left."
-                     if left > 0 else
-                     f"Your savings (${facts['buffer']:,}) would not cover the ${facts['one_off']:,} cost.")
+        can, left = _can_pay(facts)
+        if can and left > 0:
+            lines.append(f"You can pay the ${facts['one_off']:,} cost from savings and still have {_dollars(left)} left.")
+        elif can:
+            lines.append(f"You can pay the ${facts['one_off']:,} cost from savings, but it would use all of it "
+                         f"and leave no cash cushion.")
+        else:
+            lines.append(f"Your savings (${facts['buffer']:,}) would not cover the ${facts['one_off']:,} cost "
+                         f"({_dollars(left)} short).")
     elif isinstance(r, str):
         lines.append("Good news: your money coming in would still cover your usual spending.")
     else:
@@ -385,7 +444,7 @@ def template_message(facts):
     if facts["steps"]:
         lines.append("Here is what we suggest, in order:")
         for i, (step, bank) in enumerate(facts["steps"][:3], 1):
-            lines.append(f"{i}. {step} {bank.replace('Tangerine could', 'We can')}")
+            lines.append(f"{i}. {step} {bank_offer(bank)}")
     lines.append("We're here to help you set any of this up.")
     return "\n".join(lines)
 
@@ -394,11 +453,16 @@ def write_message(facts):
     """Returns (message, source)."""
     r = facts["runway_after"]
     if facts.get("one_off_only"):
-        left = facts["buffer"] - facts["one_off"]
-        outlook = (f"The one-off cost of ${facts['one_off']:,} can be paid from savings, leaving ${left:,}."
-                   if left > 0 else
-                   f"Savings of ${facts['buffer']:,} are not enough for the ${facts['one_off']:,} cost "
-                   f"(${-left:,} short).")
+        can, left = _can_pay(facts)
+        if can and left > 0:
+            outlook = (f"The one-off cost of ${facts['one_off']:,} can be paid from savings, "
+                       f"leaving {_dollars(left)}.")
+        elif can:
+            outlook = (f"The one-off cost of ${facts['one_off']:,} can be paid from savings, but it uses all of "
+                       f"the savings: no cash cushion is left afterwards.")
+        else:
+            outlook = (f"Savings of ${facts['buffer']:,} are not enough for the ${facts['one_off']:,} cost "
+                       f"({_dollars(left)} short).")
     elif isinstance(r, str):
         outlook = "After the shock, money coming in still covers usual spending, so savings are not used up."
     else:
@@ -413,7 +477,7 @@ def write_message(facts):
         "shock": facts["shock"],
         "today": today,
         "outlook_after_shock": outlook,
-        "steps_in_order": [f"{step} {bank.replace('Tangerine could', 'We can')}" for step, bank in facts["steps"][:4]],
+        "steps_in_order": [f"{step} {bank_offer(bank)}" for step, bank in facts["steps"][:4]],
     }
     if facts.get("month_by_month") is not None:
         clean["month_by_month_note"] = (f"Counting when the shock starts and ends, money runs out in about "
@@ -426,6 +490,8 @@ Rules:
 - Write in everyday words: never copy technical labels such as "no shortfall", "120+" or "runway".
 - State the outlook exactly as given; do not say the customer "can survive" the goal if the outlook says it is shorter.
 - Keep every condition in a step (for example "Once the monthly deficit is closed").
+- Bank support is only something to ask about: never say the bank has approved, pre-approved, will provide or
+  can definitely offer anything, and never say the customer qualifies.
 - No percentages or statistics about other customers. Do not blame the customer. Be supportive.
 - Put the steps in a short numbered list, in the same order.
 Facts (JSON): {json.dumps(clean, default=str)}"""

@@ -209,10 +209,14 @@ def recommend(acc, p, ei_pct, bills_up, one_off, survive_months, target_months, 
     if one_off >= B:
         plans.append(dict(prio=1, title="Arrange emergency credit before the shock",
                           do="Set up a payment plan or line of credit now.",
-                          you=f"The one-off cost (${one_off:,.0f}) is larger than the buffer (${B:,.0f}).",
+                          you=(f"The one-off cost (${one_off:,.0f}) is larger than the buffer (${B:,.0f})."
+                               if one_off > B else
+                               f"The one-off cost (${one_off:,.0f}) uses up the whole buffer (${B:,.0f})."),
                           data="Customers with under 3 months of job-loss runway went negative within a year "
                                + peer(train.job_loss_runway < 3) + ".", new=None,
-                          you_c=f"This cost (${one_off:,.0f}) is more than you have saved right now.",
+                          you_c=(f"This cost (${one_off:,.0f}) is more than you have saved right now."
+                                 if one_off > B else
+                                 f"Paying this cost (${one_off:,.0f}) would use everything you have saved right now."),
                           bank="Tangerine could pre-approve a small credit line or a payment plan, so the bill "
                                "doesn't turn into missed payments.", pinned=True))
     elif ei_pct >= 1.0 and bills_up == 0 and extra == 0 and one_off > 0:

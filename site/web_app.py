@@ -126,7 +126,6 @@ class Store:
         self.invalid = RP.invalid_accounts(self.ms)
         self.by_acct = {a: g.reset_index(drop=True) for a, g in self.ms.groupby("account_id", sort=False)}
         self.overview = self._overview()
-        self._facts = {}
         self.findings = core.findings_data()
         print(f"data ready in {time.time() - t:.1f}s · {len(self.prof):,} accounts · from {src}", flush=True)
 
@@ -222,11 +221,15 @@ class Store:
                 "target": int(min(max(int(t["survive_months"]), 1), 24)) if t.get("survive_months") else None}
 
     def message(self, q: dict) -> dict:
-        self.simulate(q)
-        msg, src = agent.write_message(self._facts[int(q["account_id"])])
+        _, facts = self._simulate(q)          # this request's own facts: nothing shared with other requests
+        msg, src = agent.write_message(facts)
         return {"message": msg, "source": src, "error": "" if src == "Gemini" else agent.short_error()}
 
     def simulate(self, q: dict) -> dict:
+        return self._simulate(q)[0]
+
+    def _simulate(self, q: dict) -> tuple[dict, dict]:
+        """(API result, the facts the customer message is written from) for one request."""
         aid = int(q["account_id"])
         p = self.prof.loc[aid]
         sc = self.scenario(q)
@@ -281,18 +284,23 @@ class Store:
             question = "last_months"
         can_pay = None
         if question == "can_pay":
-            have = p.B + windfall
-            can_pay = {"cost": num(one_off), "have": num(have), "left": num(have - one_off), "windfall": num(windfall)}
+            # Paying and having cash left afterwards are separate answers: cost == savings can be paid,
+            # with nothing left (the judges' runway is then 0, unchanged). Decided on unrounded values.
+            have = float(p.B + windfall)
+            left = have - float(one_off)
+            can_pay = {"cost": num(one_off), "have": num(have), "left": num(left), "windfall": num(windfall),
+                       "can_pay": left >= 0, "cash_left": left > 0}
         plans, risk, _ = core.recommend(aid, dict(I=p.I, S=p.S, F=p.F, B=p.B, H=p.H), keep, bills, net,
                                         target, min(kmon, 6), extra_out)
         facts = dict(customer=aid, shock=sc["text"], runway_now=core.runway(p.B, p.I, p.S),
                      runway_after=core.runway(p.B, keep * p.I, p.S + bills * p.H + extra_out, net),
                      survive=target, one_off_only=question == "can_pay", one_off=round(one_off),
                      buffer=round(p.B + windfall),
+                     can_pay=None if can_pay is None else can_pay["can_pay"],
+                     left=None if can_pay is None else can_pay["left"],
                      month_by_month=None if timed is None else (round(timed["out"], 1) if timed["out"] is not None
                                                                 else "does not run out"),
                      steps=[(pl["do"], pl["bank"]) for pl in plans])
-        self._facts[aid] = facts
         projection_extra = {"timed": timed["path"] if timed else None}
         return {
             "question": question, "can_pay": can_pay, "timed": timed, "shock_text": sc["text"],
@@ -315,7 +323,7 @@ class Store:
             "response": {"group": response.group, "label": RP.LABELS[response.group]},
             "guide": {"why": guide.why, "actions": guide.actions, "result": guide.result, "open_gap": guide.open_gap},
             "backup": backup,
-        }
+        }, facts
 
 
 def plan_json(pl: dict) -> dict:
@@ -370,6 +378,64 @@ def scenario_of(q: dict, S_typ: float) -> dict:
         d.append(f"lasts {sc['lasts']} months")
     sc["text"] = ", ".join(d) or "no shock"
     return sc
+
+
+# ================================================================ request validation
+class BadRequest(ValueError):
+    def __init__(self, field: str | None, msg: str):
+        super().__init__(msg)
+        self.field = field
+
+
+# field -> (lowest, highest, whole number only). Ranges are the ones the engine already clamps to (or wider
+# where the page can send more, e.g. a typed negative "new monthly cost"); anything outside is a 400.
+NUMBER_FIELDS = {
+    "keep": (0, 150, False), "bills_pct": (0, 500, False), "one_off": (0, 1e7, False),
+    "extra_out": (-1e9, 1e6, False), "windfall": (0, 1e7, False),
+    "start_in": (0, 24, True), "lasts": (0, 60, True), "after_pct": (0, 150, False),
+    "target": (1, 60, True), "cut": (0, 1e9, False), "extra": (0, 1e9, False),
+    "kmon": (1, 24, True), "save": (0, 1e9, False), "plan_buffer": (0, 1e8, False),
+}
+BOOL_FIELDS = ("checked",)
+TEXT_FIELDS = ("question", "label", "text")
+
+
+def validate_request(path: str, q) -> dict:
+    """Checks the JSON body of a POST before any calculation. Raises BadRequest (-> 400) on a wrong type,
+    NaN/Infinity, an out-of-range value or a missing account_id. A null number means 'use the default'.
+    Whether the account exists is checked afterwards (-> 404)."""
+    if not isinstance(q, dict):
+        raise BadRequest(None, "The request body must be a JSON object.")
+    aid = q.get("account_id")
+    if aid is None:
+        raise BadRequest("account_id", "account_id is required.")
+    if isinstance(aid, bool) or not (isinstance(aid, int) or (isinstance(aid, str) and aid.strip().isdigit())):
+        raise BadRequest("account_id", "account_id must be a whole number.")
+    out = dict(q)
+    for k, (lo, hi, whole) in NUMBER_FIELDS.items():
+        if k not in q:
+            continue
+        v = q[k]
+        if v is None:
+            out.pop(k)
+            continue
+        if isinstance(v, bool) or not isinstance(v, (int, float)):       # bool is an int in Python
+            raise BadRequest(k, f"{k} must be a number.")
+        if not math.isfinite(v):
+            raise BadRequest(k, f"{k} must be a finite number.")
+        if whole and v != int(v):
+            raise BadRequest(k, f"{k} must be a whole number.")
+        if not lo <= v <= hi:
+            raise BadRequest(k, f"{k} must be between {lo:g} and {hi:g}.")
+    for k in BOOL_FIELDS:
+        if k in q and q[k] is not None and not isinstance(q[k], bool):
+            raise BadRequest(k, f"{k} must be true or false.")
+    for k in TEXT_FIELDS:                       # length is trimmed later by the route, as before
+        if k in q and q[k] is not None and not isinstance(q[k], str):
+            raise BadRequest(k, f"{k} must be text.")
+    if path == "/api/twist" and not isinstance(q.get("text"), str):
+        raise BadRequest("text", "text is required.")
+    return out
 
 
 STORE: Store | None = None
@@ -448,12 +514,26 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(404, "Not found.")
         try:
             n = int(self.headers.get("Content-Length", 0))
-            q = json.loads(self.rfile.read(n) or b"{}")
-            if self._account_id(str(q.get("account_id", ""))) is None:
-                return self._error(404, "We couldn't find that account.")
+            raw = self.rfile.read(n) if n > 0 else b""
+            try:
+                q = json.loads(raw or b"{}")
+            except ValueError as exc:                     # includes bad UTF-8
+                raise BadRequest(None, f"The request body is not valid JSON ({exc}).") from None
+            q = validate_request(path, q)
+        except BadRequest as exc:
+            return self._json({"error": f"Bad request: {exc}", "field": exc.field}, 400)
+        except ValueError:
+            return self._json({"error": "Bad request: Content-Length must be a whole number.", "field": None}, 400)
+        if self._account_id(str(q["account_id"]).strip()) is None:
+            return self._error(404, "We couldn't find that account.")
+        try:
             return self._json(routes[path](q))
-        except (ValueError, TypeError, KeyError) as exc:
-            return self._error(400, f"Bad request: {exc}")
+        except ValueError as exc:                         # e.g. an empty twist card
+            return self._json({"error": f"Bad request: {exc}", "field": None}, 400)
+        except Exception as exc:  # pragma: no cover - a bug, not bad input: answer and keep the traceback
+            import traceback
+            traceback.print_exc()
+            return self._error(500, f"Server error: {type(exc).__name__}")
 
     def _static(self, path: str):
         rel = "index.html" if path in ("/", "") else path.lstrip("/")
