@@ -153,6 +153,8 @@ check("no-transfer finding: Fisher p < 0.001", core.fisher(79, 660, 50, 3000) < 
 fd = core.findings_data()["cards"]
 check("every finding card carries a test", all(c.get("test") for c in fd), True)
 check("held-out AUC CI excludes 0.5", core.AUC_CI[0] > 0.5, True)
+tr = [p.get("track", "") for p in plans if p["title"].startswith("Shock plan")]
+check("cut plan checked against the customer's own months", bool(tr and tr[0].startswith("Done before?")), True)
 
 print("\n6) Gemini (optional)")
 try:
