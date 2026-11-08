@@ -79,7 +79,7 @@
   const S = {
     overview: null, ids: [], byId: new Map(), accounts: new Map(),
     acct: null, data: null, sim: null,
-    preset: "ei55", shock: { keep: 55, bills: 0, oneOff: 0, ...NO_EXTRA }, question: "last_months", label: "job loss (EI 55%)",
+    preset: "none", shock: { keep: 100, bills: 0, oneOff: 0, ...NO_EXTRA }, question: "auto", label: "",
     plans: new Map(), peerMode: "income", msgKey: null, openTok: 0,
     preview: new Map(),   // account → monthly cut drawn on the chart only (not confirmed, never counted)
   };
@@ -149,9 +149,9 @@
     const first = S.acct == null || $("#main").hidden;
     const changed = S.acct !== id;
     S.acct = id; S.data = data;
-    if (changed) {                        // a new customer starts clean: job loss at EI 55%, nothing left over
-      const cfg = PRESETS.ei55;
-      S.preset = "ei55"; S.question = cfg.q; S.label = cfg.label;
+    if (changed) {                        // a new customer starts clean: today, no shock, nothing left over
+      const cfg = PRESETS.none;
+      S.preset = "none"; S.question = cfg.q; S.label = cfg.label;
       S.shock = { keep: cfg.keep, bills: cfg.bills, oneOff: cfg.oneOff, ...NO_EXTRA };
       $("#twist-note").hidden = true; S.pendingTwist = null; $("#more-shock").open = false;
     }
