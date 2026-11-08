@@ -427,17 +427,17 @@ def recommend(acc, p, ei_pct, bills_up, one_off, survive_months, target_months, 
 # ---------------------------------------------------------------------
 PRESETS = {
     "Custom": None,
-    "Job loss (EI 55%)": dict(job=True, ei=55, bills=0, one_mode="None", one_amt=0, one_m=0.0, survive=6,
+    "Job loss (EI 55%)": dict(job=True, ei=55.0, bills=0.0, one_mode="None", one_amt=0, one_m=0.0, survive=6,
                               q_type="last_months"),
-    "Furnace dies (1 month of spending)": dict(job=False, ei=55, bills=0, one_mode="Months of spending",
+    "Furnace dies (1 month of spending)": dict(job=False, ei=55.0, bills=0.0, one_mode="Months of spending",
                                                one_amt=0, one_m=1.0, q_type="can_pay"),
-    "Job loss + bills +15%": dict(job=True, ei=55, bills=15, one_mode="None", one_amt=0, one_m=0.0,
+    "Job loss + bills +15%": dict(job=True, ei=55.0, bills=15.0, one_mode="None", one_amt=0, one_m=0.0,
                                   q_type="last_months"),
 }
-SHOCK_RESET = dict(inc_other=0, extra=0, spend_pct=0, windfall=0, start_in=0, lasts=0, after_inc=100, twist_warn="")
-for k, v in dict(job=True, ei=55, bills=0, one_mode="None", one_amt=0, one_m=0.0, acc=20111, survive=6,
-                 inc_other=0, extra=0, spend_pct=0, q_type="auto", twist_warn="",
-                 windfall=0, start_in=0, lasts=0, after_inc=100,
+SHOCK_RESET = dict(inc_other=0.0, extra=0, spend_pct=0.0, windfall=0, start_in=0, lasts=0, after_inc=100.0, twist_warn="")
+for k, v in dict(job=True, ei=55.0, bills=0.0, one_mode="None", one_amt=0, one_m=0.0, acc=20111, survive=6,
+                 inc_other=0.0, extra=0, spend_pct=0.0, q_type="auto", twist_warn="",
+                 windfall=0, start_in=0, lasts=0, after_inc=100.0,
                  twist_text="", twist_note="", view="Advisor").items():
     st.session_state.setdefault(k, v)
 
@@ -454,19 +454,22 @@ def read_twist():
     if not text:
         return
     t, src = agent.parse_twist(text)
-    st.session_state.inc_other = int(max(-100, min(50, round(float(t["other_income_change_pct"])))))
+    st.session_state.inc_other = float(max(-100, min(50, round(float(t["other_income_change_pct"]), 1))))
     st.session_state.extra = int(round(float(t["extra_monthly_dollars"])))
-    st.session_state.spend_pct = int(max(-50, min(100, round(float(t["spending_change_pct"])))))
+    st.session_state.spend_pct = float(max(-50, min(100, round(float(t["spending_change_pct"]), 1))))
     st.session_state.q_type = t.get("question", "auto")
     st.session_state.windfall = int(round(float(t.get("windfall_dollars", 0))))
     st.session_state.start_in = int(min(max(int(t.get("starts_in_months", 0)), 0), 12))
     st.session_state.lasts = int(min(max(int(t.get("shock_lasts_months", 0)), 0), 24))
-    st.session_state.after_inc = int(min(max(round(float(t.get("income_after_pct", 100))), 0), 150))
-    st.session_state.twist_warn = ("Not modelled: " + "; ".join(t["unsupported"])) if t.get("unsupported") else ""
+    st.session_state.after_inc = float(min(max(round(float(t.get("income_after_pct", 100)), 1), 0), 150))
+    warn = list(t.get("unsupported") or [])
+    if float(t["bills_up_pct"] or 0) > 500:
+        warn.append(f"bills +{t['bills_up_pct']:g}% capped at +500%")
+    st.session_state.twist_warn = ("Not modelled: " + "; ".join(warn)) if warn else ""
     st.session_state.job = bool(t["job_loss"])
     if t["job_loss"]:
-        st.session_state.ei = int(round(float(t["ei_pct"] or 0)))                  # keep the exact % on the card
-    st.session_state.bills = int(min(round(float(t["bills_up_pct"] or 0)), 300))
+        st.session_state.ei = float(round(float(t["ei_pct"] or 0), 1))             # keep the exact % on the card
+    st.session_state.bills = float(min(round(float(t["bills_up_pct"] or 0), 1), 500))
     if t["one_off_dollars"] and t["one_off_months_of_spending"]:      # both given: keep the dollar total,
         S_now = profile(int(st.session_state.acc))[0]["S"]             # converting the months part to dollars
         t["one_off_dollars"] += t["one_off_months_of_spending"] * S_now
@@ -508,8 +511,8 @@ with st.sidebar:
         st.warning(st.session_state.twist_warn, icon="⚠️")
     st.selectbox("Or pick a preset", list(PRESETS), key="preset", on_change=apply_preset)
     st.toggle("Job loss", key="job")
-    st.slider("EI pays (% of usual income)", 0, 100, key="ei", step=1, disabled=not st.session_state.job)
-    st.slider("Household bills increase (%)", 0, 300, key="bills", step=1)
+    st.slider("EI pays (% of usual income)", 0.0, 100.0, key="ei", step=0.1, format="%.1f%%", disabled=not st.session_state.job)
+    st.slider("Household bills increase (%)", 0.0, 500.0, key="bills", step=0.1, format="%.1f%%")
     st.radio("One-off cost", ["None", "Dollar amount", "Months of spending"], key="one_mode", horizontal=True)
     if st.session_state.one_mode == "Dollar amount":
         st.number_input("One-off cost ($)", min_value=0, step=500, key="one_amt")
@@ -517,11 +520,11 @@ with st.sidebar:
         st.slider("One-off cost (months of typical spending)", 0.0, 6.0, step=0.05, key="one_m")
     more = any(st.session_state[k] for k in ("inc_other", "extra", "spend_pct", "windfall"))
     with st.expander("More shock types", expanded=bool(more)):
-        st.slider("Other income change (%)", -100, 50, step=1, key="inc_other",
+        st.slider("Other income change (%)", -100.0, 50.0, step=0.1, format="%.1f%%", key="inc_other",
                   help="Pay cut, fewer hours, a partner's lost income (negative) or a raise (positive).")
         st.number_input("New monthly costs ($/month)", min_value=0, step=50, key="extra",
                         help="New recurring costs, e.g. childcare or a car payment.")
-        st.slider("Overall spending change (%)", -50, 100, step=1, key="spend_pct",
+        st.slider("Overall spending change (%)", -50.0, 100.0, step=0.1, format="%.1f%%", key="spend_pct",
                   help="e.g. prices rise 5% → +5")
         st.number_input("One-off money in ($)", min_value=0, step=500, key="windfall",
                         help="Bonus, tax refund, gift or severance that arrives once.")
@@ -530,7 +533,7 @@ with st.sidebar:
         st.slider("Shock starts in (months)", 0, 12, key="start_in")
         st.slider("Shock lasts (months, 0 = ongoing)", 0, 24, key="lasts",
                   help="e.g. EI paid for 6 months → 6")
-        st.slider("Income after it ends (% of usual)", 0, 150, step=1, key="after_inc",
+        st.slider("Income after it ends (% of usual)", 0.0, 150.0, step=0.1, format="%.1f%%", key="after_inc",
                   help="EI runs out with no new job → 0. Pay cut ends → 100.")
     st.selectbox("Question on the card", ["auto", "can_pay", "last_months", "how_long"], key="q_type",
                  format_func={"auto": "Auto-detect", "can_pay": "Can they pay it?",
@@ -586,13 +589,13 @@ def fmt_evidence(text):
 
 shock_desc = []
 if st.session_state.job:
-    shock_desc.append(f"job loss (EI {st.session_state.ei}%)")
+    shock_desc.append(f"job loss (EI {st.session_state.ei:g}%)")
 if st.session_state.inc_other:
-    shock_desc.append(f"income {st.session_state.inc_other:+d}%")
+    shock_desc.append(f"income {st.session_state.inc_other:+g}%")
 if bills_up:
-    shock_desc.append(f"bills +{st.session_state.bills}%")
+    shock_desc.append(f"bills +{st.session_state.bills:g}%")
 if st.session_state.spend_pct:
-    shock_desc.append(f"spending {st.session_state.spend_pct:+d}%")
+    shock_desc.append(f"spending {st.session_state.spend_pct:+g}%")
 if st.session_state.extra:
     shock_desc.append(f"new costs {money(st.session_state.extra)}/month")
 if one_off_cost:
@@ -612,7 +615,7 @@ sim_args = dict(start_in=st.session_state.start_in, lasts=st.session_state.lasts
 r_real, path_real = simulate(p["B"], p["I"], p["S"], inc2, sp2, one_off, **sim_args)
 timing_html = ""
 if st.session_state.start_in or st.session_state.lasts:
-    ends = (f"after {st.session_state.lasts} months income goes to {st.session_state.after_inc}% of usual"
+    ends = (f"after {st.session_state.lasts} months income goes to {st.session_state.after_inc:g}% of usual"
             if st.session_state.lasts else "ongoing")
     real_txt = f"money runs out in <b>{r_real:.1f} months</b>" if r_real is not None else \
                "money does <b>not</b> run out within 10 years"
