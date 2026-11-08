@@ -686,15 +686,22 @@
   }
 
   function renderTable() {
-    const s = S.sim, cols = [s.base, s.after, s.planned];
-    const row = (label, f, riskFn) => `<tr><td>${label}</td>${cols.map((r) => `<td class="${riskFn && riskFn(r) ? "risk" : ""}">${f(r)}</td>`).join("")}</tr>`;
-    $("#figtable").innerHTML = `<thead><tr><th>Per month</th><th>Today</th><th>With this shock</th><th>With your plan</th></tr></thead><tbody>
+    // the third column is what the chart draws: the confirmed plan, or a preview (labelled as one), never a mix
+    const s = S.sim, pv = !s.plan_active && s.preview, third = pv ? s.preview : s.planned, cols = [s.base, s.after, third];
+    const head = pv ? "Preview (not confirmed)" : s.plan_active ? "With your plan" : "With your plan (nothing confirmed)";
+    // how long it lasts: with timing, the shock and plan columns use the same month-by-month engine as the rest
+    const short = (o) => (o == null ? "doesn't run out" : o.toFixed(1));
+    const tOut = (i) => (i === 1 ? s.timed.out : pv ? s.timed.preview_out : s.timed.plan_out);
+    const how = (r, i) => (s.timed && i > 0 ? short(tOut(i)) : r.display);
+    const howRisk = (r, i) => (s.timed && i > 0 ? tOut(i) != null && tOut(i) < s.target
+      : r.status === "buffer_gone" || (r.status === "shortfall" && r.raw < s.target));
+    const row = (label, f, riskFn) => `<tr><td>${label}</td>${cols.map((r, i) => `<td class="${riskFn && riskFn(r, i) ? "risk" : ""}">${f(r, i)}</td>`).join("")}</tr>`;
+    $("#figtable").innerHTML = `<thead><tr><th>Per month</th><th>Today</th><th>With this shock</th><th>${head}</th></tr></thead><tbody>
       ${row("Money in", (r) => money(r.income))}
       ${row("Money out", (r) => money(r.spending))}
       ${row("Change in cash", (r) => money(-r.gap, true), (r) => r.gap > 0)}
       ${row("Cushion after one-off", (r) => money(r.buffer_left), (r) => r.buffer_left <= 0)}
-      ${row("How long it lasts", (r) => esc(r.display),
-        (r) => r.status === "buffer_gone" || (r.status === "shortfall" && r.raw < s.target))}
+      ${row(s.timed ? "How long it lasts (month by month)" : "How long it lasts", (r, i) => esc(how(r, i)), howRisk)}
     </tbody>`;
     // cells whose value changed fade up once, so the eye finds what the shock moved
     const cells = $$("#figtable tbody td:not(:first-child)"), texts = cells.map((td) => td.textContent);
@@ -780,7 +787,9 @@
     const showPlan = !!sim.plan_active || !!sim.preview;
     $("#lg-timed").hidden = !s.timed;
     { const li = $(".lg-shock").parentElement;           // with timing, this line is the never-ending case
-      li.lastChild.textContent = s.timed ? "If it never ended" : "With this shock"; }
+      li.lastChild.textContent = s.timed ? "If it never ended" : "With this shock";
+      const lp = $(".lg-plan").parentElement;             // a preview is named as one, not as the plan
+      lp.lastChild.textContent = !sim.plan_active && sim.preview ? "Preview (not confirmed)" : "With your plan"; }
     $(".lg-plan").parentElement.style.opacity = showPlan ? 1 : .4;
     if (!box.clientWidth) { T.dirty = true; return; }   // dashboard hidden: draw at the real size when it shows
     T.dirty = false;
