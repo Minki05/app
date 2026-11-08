@@ -127,7 +127,7 @@ def parse_rules(text):
     m = re.search(r"(?:pay|salary|wages?|hours|income)\s+(?:is\s+|are\s+|gets?\s+)?(?:cut|drops?|falls?|reduced|goes down|go down)"
                   r"[^.%\d]{0,15}" + PCT, t) or \
         re.search(PCT + r"\s+(?:pay|salary|wage|income|hours)\s+cut", t) or \
-        re.search(r"(?:cut|reduce)s?\s+(?:their|his|her|your)?\s*(?:pay|salary|hours|income)\s+by\s+" + PCT, t)
+        re.search(r"(?:cut|reduce)s?\s+(?:[\w']+\s+){0,2}(?:pay|salary|hours|income|wages?)\s+by\s+" + PCT, t)
     if m:
         out["other_income_change_pct"] = -float(m.group(1))
     m = re.search(r"(?:gets? a (?:pay )?raise|pay raise|pay rise|salary (?:goes up|rises|increases)|"
@@ -148,11 +148,13 @@ def parse_rules(text):
         re.search(PCT + r"\s*(?:higher|increase|rise|more|jump)[^.]{0,25}(?:bills?|rent|utilit)", t) or \
         re.search(r"(?:raises?|increases?|hikes?|ups?)\s+(?:the\s+|their\s+|your\s+)?(?:rent|bills?|utilit\w*)"
                   r"[^.%\d]{0,15}" + PCT, t)
+    t_wo_bills = t
     if m:
         out["bills_up_pct"] = float(m.group(1))
+        t_wo_bills = t.replace(m.group(0), " ")
     # --- general spending change (inflation, prices)
-    m = re.search(r"(?:prices?|cost of living|inflation|spending|groceries)[^.%\d]{0,30}" + PCT, t)
-    if m and not out["bills_up_pct"]:
+    m = re.search(r"(?:prices?|cost of living|inflation|spending|groceries)[^.%\d]{0,30}" + PCT, t_wo_bills)
+    if m:
         out["spending_change_pct"] = float(m.group(1))
     # --- loan / mortgage payment goes up by $X
     for m in re.finditer(r"(?:loan|mortgage|car|lease|student loan|credit card)\s+payments?[^.$]{0,30}?"
@@ -170,7 +172,10 @@ def parse_rules(text):
     m = re.search(r"(?:in|starting in|starts in|after|from)\s+" + NUM + r"\s+months?(?:\s+from now|\s+time)?", t)
     if m and not re.search(r"for\s+" + NUM + r"\s+months?", t[max(0, m.start() - 4):m.end()]):
         out["starts_in_months"] = int(round(_num(m.group(1))))
-    m = re.search(r"(?:for|lasts?|over|next)\s+" + NUM + r"\s+months?", t)
+    ASK = r"(?:make it|keep up|survive|get through|last|stay afloat|hold on|hang on)(?:\s+through)?(?:\s+(?:for|the next|over))?"
+    target = re.search(ASK + r"\s+" + NUM + r"\s+months?", t) or re.search(ASK + r"\s+(?:a|one|1|a full|the)\s+(year)", t)
+    t_dur = t.replace(target.group(0), " ") if target else t
+    m = re.search(r"(?:for|lasts?|over|next)\s+" + NUM + r"\s+months?", t_dur)
     if m:
         out["shock_lasts_months"] = int(round(_num(m.group(1))))
         if out["job_loss"]:
@@ -193,10 +198,20 @@ def parse_rules(text):
     for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(k|thousand)?\s*(?:dollars|cad)\b", t_wo_monthly):
         total += float(m.group(1)) * (1000 if m.group(2) else 1)
     out["one_off_dollars"] = total
-    # --- how long
-    m = re.search(r"(?:for|lasts?|over|next)\s+" + NUM + r"\s+months?", t)
-    if m:
-        out["survive_months"] = int(round(_num(m.group(1))))
+    # --- how long they need to get through: asked directly ("make it through a year"), else the shock period
+    if target:
+        out["survive_months"] = 12 if target.group(1) == "year" else int(round(_num(target.group(1))))
+    elif out["shock_lasts_months"] and re.search(r"make it|survive|get through|keep up|stay afloat", t):
+        out["survive_months"] = out["shock_lasts_months"]
+    if re.search(r"interest rates?|rate (?:hike|increase|rise)|variable[- ]rate|basis points", t) and \
+            not out["extra_monthly_dollars"]:
+        out["unsupported"].append("interest-rate change: the data can't split loan interest from principal, "
+                                  "so enter the higher monthly payment under 'New monthly costs'")
+    found = any(out[k] for k in ("job_loss", "other_income_change_pct", "bills_up_pct", "spending_change_pct",
+                                 "extra_monthly_dollars", "one_off_dollars", "one_off_months_of_spending",
+                                 "windfall_dollars"))
+    if not found and not out["unsupported"]:
+        out["unsupported"].append("no shock the engine can model was found in this card")
     # --- what is being asked
     if re.search(r"can (?:they|he|she|you) (?:afford|pay|cover)|afford it|enough to (?:pay|cover)", t):
         out["question"] = "can_pay"
@@ -268,6 +283,11 @@ Card: "The furnace dies, and the repair costs a full month of their typical spen
  "spending_change_pct": 0, "one_off_dollars": 0, "one_off_months_of_spending": 1, "windfall_dollars": 0,
  "starts_in_months": 0, "shock_lasts_months": 0, "income_after_pct": 100, "survive_months": null,
  "question": "can_pay", "unsupported": []}
+Card: "They lose their job (EI at 55%) and their household bills go up 15% in the same month."
+{"job_loss": true, "ei_pct": 55, "other_income_change_pct": 0, "bills_up_pct": 15, "extra_monthly_dollars": 0,
+ "spending_change_pct": 0, "one_off_dollars": 0, "one_off_months_of_spending": 0, "windfall_dollars": 0,
+ "starts_in_months": 0, "shock_lasts_months": 0, "income_after_pct": 0, "survive_months": null,
+ "question": "auto", "unsupported": []}
 Card: "Their hours get cut by a quarter and daycare adds $650 a month. How long can they keep going?"
 {"job_loss": false, "ei_pct": null, "other_income_change_pct": -25, "bills_up_pct": 0, "extra_monthly_dollars": 650,
  "spending_change_pct": 0, "one_off_dollars": 0, "one_off_months_of_spending": 0, "windfall_dollars": 0,
@@ -277,15 +297,32 @@ Card: "Their hours get cut by a quarter and daycare adds $650 a month. How long 
 Card: \"\"\"{card}\"\"\""""
 
 
+CROSS_CHECK = ("other_income_change_pct", "bills_up_pct", "extra_monthly_dollars", "spending_change_pct",
+               "one_off_dollars", "one_off_months_of_spending", "windfall_dollars")
+ADDED = []          # what the rule check filled in on the last Gemini read (shown on screen)
+
+
 def parse_twist(text):
-    """Returns (params, source)."""
+    """Returns (params, source). Gemini reads the card; the rule-based reader then checks it, and any shock Gemini
+    left at 0 that the rules clearly found is filled in (and listed in ADDED), so one missed phrase can't drop a shock."""
+    global ADDED
+    ADDED = []
     raw = _gemini(PARSE_PROMPT.replace("{card}", text), want_json=True)
     if raw:
         try:
-            d = json.loads(raw.strip().removeprefix("```json").removesuffix("```"))
-            return _clean(d), "Gemini"
+            d = _clean(json.loads(raw.strip().removeprefix("```json").removesuffix("```")))
         except Exception:
-            pass
+            d = None
+        if d is not None:
+            r = parse_rules(text)
+            if r["job_loss"] and not d["job_loss"]:
+                d["job_loss"], d["ei_pct"] = True, r["ei_pct"]
+                ADDED.append(f"job loss with EI at {r['ei_pct']:g}%")
+            for k in CROSS_CHECK:
+                if r[k] and not d[k]:
+                    d[k] = r[k]
+                    ADDED.append(describe({**EMPTY, "unsupported": [], k: r[k]}))
+            return d, "Gemini"
     return parse_rules(text), "rule-based reader"
 
 

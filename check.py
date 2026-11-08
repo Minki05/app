@@ -73,9 +73,33 @@ cases = [
     ("Their pay is cut 25% for 4 months, then goes back to normal.",
      dict(other_income_change_pct=-25.0, shock_lasts_months=4, income_after_pct=100.0)),
 ]
+cases += [
+    ("Their landlord raises the rent by 25%. Can they keep up for 6 months?",
+     dict(bills_up_pct=25.0, survive_months=6, shock_lasts_months=0)),
+    ("Their employer cuts everyone's hours by 30%. Do they make it through 6 months?",
+     dict(other_income_change_pct=-30.0, survive_months=6)),
+    ("In 3 months they lose their job; EI pays 55% for 6 months, then nothing. Do they make it through a year?",
+     dict(starts_in_months=3, shock_lasts_months=6, survive_months=12)),
+    ("Inflation pushes all their spending up 8%, and their bills go up 10%.",
+     dict(spending_change_pct=8.0, bills_up_pct=10.0)),
+    ("Their pay is cut 20% for 4 months, then goes back to normal.", dict(survive_months=None, shock_lasts_months=4)),
+]
 for text, want in cases:
     got = agent.parse_rules(text)
     check(text[:60], {k: got[k] for k in want}, want)
+
+w = agent.parse_rules("Interest rates rise 2 points on their variable-rate loan.")["unsupported"]
+check("interest-rate card warns instead of staying silent", bool(w), True)
+check("card with no shock warns", bool(agent.parse_rules("They win a trip to Hawaii.")["unsupported"]), True)
+
+real_gemini = agent._gemini
+miss = dict(job_loss=True, ei_pct=55, other_income_change_pct=0, bills_up_pct=0, extra_monthly_dollars=0,
+            spending_change_pct=0, one_off_dollars=0, one_off_months_of_spending=0, windfall_dollars=0, starts_in_months=0,
+            shock_lasts_months=0, income_after_pct=0, survive_months=None, question="auto", unsupported=[])
+agent._gemini = lambda prompt, want_json=False: __import__("json").dumps(miss)
+d, _ = agent.parse_twist("They lose their job (EI at 55%) and their household bills go up 15% in the same month.")
+check("rule check fills a shock Gemini missed (bills +15%)", d["bills_up_pct"], 15.0)
+agent._gemini = real_gemini
 
 print("\n3) Month-by-month simulator agrees with the judge formula when the shock never ends")
 sys.argv = ["x"]

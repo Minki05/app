@@ -178,6 +178,8 @@ def read_twist():
     st.session_state.preset = "Custom"
     src_label = f"Gemini ({agent.USED_MODEL})" if src == "Gemini" else src
     st.session_state.twist_note = f"Read by {src_label}: {agent.describe(t)}"
+    if src == "Gemini" and agent.ADDED:
+        st.session_state.twist_note += f" (rule check added: {'; '.join(agent.ADDED)})"
     if src != "Gemini" and agent.LAST_ERROR:
         st.session_state.twist_note += f" · backup reader used ({agent.short_error()})"
 

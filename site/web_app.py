@@ -203,6 +203,8 @@ class Store:
         if bills > 500:
             warn.append(f"bills +{bills:g}% capped at +500%")
         note = f"Read by {'Gemini (' + agent.USED_MODEL + ')' if src == 'Gemini' else src}: {agent.describe(t)}"
+        if src == "Gemini" and agent.ADDED:
+            note += f" (rule check added: {'; '.join(agent.ADDED)})"
         if src != "Gemini" and agent.LAST_ERROR:
             note += f" · backup reader used ({agent.short_error()})"
         parts = []
