@@ -37,7 +37,7 @@ If Gemini is unavailable, the rule-based reader and a template message take over
 - `discovery.py` — reproduces every finding from the raw data (output in `discovery_output.txt`)
 - `check.py` — 61 automated checks: judges' example answers, twist-card phrasings, regression and statistical tests
 - `site/check_web.py` — 128 checks through the real web server and page
-- `site/check_guardrails.py` — 112 demo guardrails, run with AI switched off, including 250 random accounts x
+- `site/check_guardrails.py` — 114 demo guardrails, run with AI switched off, including 250 random accounts x
   random scenarios (with and without timing) where every output must reach the same conclusion: verdict, shortfall,
   monthly change needed, plan result, guide, message and chart. `RR_N=1500 RR_SEED=7` runs more.
 - `app.py` — backup Streamlit front end on the same `core.py`

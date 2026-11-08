@@ -242,7 +242,8 @@ def parse_rules(text):
                   r"go up|goes up|climb|climbs)[^.%\d]{0,15}" + PCT, t) or \
         re.search(PCT + r"\s*(?:higher|increase|rise|more|jump)[^.]{0,25}(?:bills?|rent|utilit)", t) or \
         re.search(r"(?:raises?|increases?|hikes?|ups?)\s+(?:the\s+|their\s+|your\s+)?(?:rent|bills?|utilit\w*)"
-                  r"[^.%\d]{0,15}" + PCT, t)
+                  r"[^.%\d]{0,15}" + PCT, t) or \
+        re.search(r"\b(?:bills?|rent|utilit\w*)\s*(?:\+|up\s+)?\s*" + PCT, t)   # shorthand: "bills 15%", "bill +15%"
     t_wo_bills = t
     if m and negated_at(t, m):
         out["unsupported"].append(f"'{m.group(0).strip()}' is stated as NOT happening, so it was not applied")

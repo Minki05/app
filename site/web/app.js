@@ -509,9 +509,9 @@
         const [cls, tag] = STATUS[f.status] || STATUS.none;
         return `<div class="rc-row ${cls}${f.status === "none" ? " quiet" : ""}">
           <span class="rc-dot" aria-hidden="true"></span>
-          <label for="rc-${f.key}">${esc(f.label)}<small>${esc(tag)}${f.why ? " · " + esc(f.why) : ""}</small></label>
+          <label for="rc-${f.key}">${esc(f.label)}<small>${f.key === "afterPct" && !t.shock.lasts ? "Only used when the shock ends" : esc(tag)}${f.why ? " · " + esc(f.why) : ""}</small></label>
           <span class="rc-in">${f.unit === "$" ? "<i>$</i>" : ""}<input id="rc-${f.key}" data-key="${f.key}" type="number"
-            step="any" value="${+(+val(f)).toFixed(2)}" inputmode="decimal">${f.unit === "%" ? "<i>%</i>" : f.unit === "mo" ? "<i>mo</i>" : ""}</span>
+            step="any" value="${f.key === "afterPct" && !t.shock.lasts ? "" : +(+val(f)).toFixed(2)}" placeholder="—" inputmode="decimal">${f.unit === "%" ? "<i>%</i>" : f.unit === "mo" ? "<i>mo</i>" : ""}</span>
         </div>`;
       }).join("");
       const miss = (t.missing || []).map((w) => `<li>${esc(w)}</li>`).join("");
@@ -538,6 +538,8 @@
     if (!pend || pend.acct !== S.acct) { toast("The account changed: read the card again."); return; }
     const t = pend.t, v = {};
     $$("#twist-note input[data-key]").forEach((el) => { v[el.dataset.key] = Number(el.value) || 0; });
+    // "money in after it ends" only matters when the shock ends; left blank (or no end) it means back to usual
+    if (!Math.round(v.lasts) || $("#rc-afterPct").value === "") v.afterPct = 100;
     const clamp = (x, lo, hi) => Math.min(Math.max(x, lo), hi);
     const before = { ...S.shock, target: planFor(S.acct).target };
     S.shock = { keep: clamp(v.keep, 0, 150), bills: clamp(v.bills, 0, 500), oneOff: Math.max(v.oneOff, 0),

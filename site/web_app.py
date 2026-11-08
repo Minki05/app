@@ -194,6 +194,16 @@ class Store:
             raise ValueError("Paste a twist card first.")
         t, src = agent.parse_twist(text)
         p = self.prof.loc[int(q["account_id"])]
+        # a repair with no cost in the card ("the boiler broke"): use the competition's own example (a furnace =
+        # one month of usual spending), marked as an assumption on the confirm card, never silently
+        low = text.lower()
+        t["_repair_assumed"] = False
+        if not t["one_off_dollars"] and not t["one_off_months_of_spending"] and re.search(REPAIR, low) and \
+                not re.search(r"\$\s?\d|\d\s*(?:dollars|k\b|thousand)", low):
+            t["one_off_months_of_spending"] = 1.0
+            t["_repair_assumed"] = True
+            t["unsupported"] = [u for u in (t.get("unsupported") or []) if not re.search(REPAIR, u.lower())
+                                and not u.startswith("no shock the engine can model")]
         ei = float(t["ei_pct"] or 0) if t["job_loss"] else 100.0
         keep = ei * (1 + float(t["other_income_change_pct"] or 0) / 100)
         if t.get("extra_income_dollars") and p.I > 0:      # $X more/less money in per month, as a share of usual
@@ -409,6 +419,10 @@ class Store:
         }, facts
 
 
+REPAIR = (r"furnace|boiler|water heater|hot water tank|heat pump|\broof\b|car (?:repair|breaks|broke)|"
+          r"transmission|appliance|fridge|washer|dryer|repairs?\b")
+
+
 def read_fields(text, t, shock, target, p, warn):
     """What the card was read as, field by field, for the person to check before anything is calculated.
     status: "read" (stated in the card), "assumed" (filled in or worked out: the reason says how), "none"."""
@@ -445,7 +459,11 @@ def read_fields(text, t, shock, target, p, warn):
                    f"${float(t['spending_change_pct']) / 100 * float(p.S):+,.0f}/month")
     add("extraOut", "New monthly costs (− = lower)", "$", st if shock["extraOut"] else "none", "; ".join(why))
     why, st = [], "read"
-    if t["one_off_months_of_spending"]:
+    if t.get("_repair_assumed"):
+        st = "assumed"
+        why.append(f"no cost given in the card: assumed one month of usual spending (${float(p.S):,.0f}), as in "
+                   "the competition's furnace example")
+    elif t["one_off_months_of_spending"]:
         st = "assumed"
         why.append(f"{float(t['one_off_months_of_spending']):g} month(s) of usual spending × ${float(p.S):,.0f}")
     add("oneOff", "One-time cost", "$", st if shock["oneOff"] else "none", "; ".join(why))

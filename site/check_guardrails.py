@@ -274,6 +274,15 @@ check("confirm card: reading a card changes nothing until confirmed (the page co
       "S.shock =" not in JS[JS.index("async function readTwist"):JS.index("function confirmTwist")]
       and "S.shock =" in JS[JS.index("function confirmTwist"):JS.index("function confirmTwist") + 3000])
 
+t = S.twist(dict(account_id=20111, text="EI 55%, boiler broken, misemployment, bill 15%"))
+f = {x["key"]: x for x in t["fields"]}
+check("'boiler broken' with no cost: one month of spending, marked assumed with the reason, not dropped",
+      t["shock"]["oneOff"] == round(float(P20111.S)) and f["oneOff"]["status"] == "assumed"
+      and "furnace example" in f["oneOff"]["why"] and t["shock"]["bills"] == 15 and t["shock"]["keep"] == 55, (t["shock"], f["oneOff"]))
+t = S.twist(dict(account_id=20111, text="The furnace breaks and costs $4,000."))
+check("a repair WITH a cost uses that cost (read, not assumed)", t["shock"]["oneOff"] == 4000
+      and {x["key"]: x for x in t["fields"]}["oneOff"]["status"] == "read", t["shock"])
+
 print("\n10) Plans say WHEN they apply: now (today's income) or if the shock hits (income after it)")
 d = S.simulate(dict(account_id=20111, keep=55, target=6))
 fund = [p for p in d["plans"] if p["title"].startswith("Build an emergency fund")]
