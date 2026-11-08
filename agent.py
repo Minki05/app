@@ -128,6 +128,17 @@ def job_loss_mentions(text, pattern=JOB_LOSS):
     return affirmed, negated
 
 
+def _ei_state(t, m):
+    """How an EI share match is meant, from the words before it in its clause:
+    'negated' ("do not receive EI at 55%"), 'hypothetical' ("if I did, EI would pay 55%") or 'real'."""
+    clause = re.split(r"[.;:!?]|\bbut\b|\band\b", t[:m.start()])[-1]
+    if re.search(r"\b(?:not|never|no)\b|n't\b", clause):
+        return "negated"
+    if re.search(r"\b(?:if|unless|whether)\b|\bin case\b", clause):
+        return "hypothetical"
+    return "real"
+
+
 def parse_rules(text):
     """Backup reader: regular expressions for the common ways a twist card is phrased."""
     t = " " + text.lower().replace(",", "") + " "
@@ -135,7 +146,12 @@ def parse_rules(text):
     # --- job loss + EI   (customers write in the first person too: my / our / I / we)
     poss = _POSS
     partner = re.search(r"\b(?:partner|spouse|husband|wife)\b", t)
-    if job_loss_mentions(text)[0] and not partner:
+    affirmed, negated = job_loss_mentions(text)
+    if affirmed and negated and not partner:
+        # "I was not fired. I was laid off." — both a denial and a statement: don't pick one as fact
+        out["unsupported"].append("job loss unclear (the card both states and denies one): not applied, "
+                                  "lower the money-in setting by hand if it applies")
+    elif affirmed and not partner:
         out["job_loss"] = True
     # "55% of my pay" names the share directly, so it wins; "EI ... 55%" must stay inside one sentence,
     # otherwise "... from EI. My rent goes up 15%" would read the rent rise as the EI share.
@@ -143,12 +159,27 @@ def parse_rules(text):
     m = (not partner and re.search(PCT + r"\s*of (?:their|his|her|the|your|my|our)? ?(?:usual|normal|regular|old)? ?"
                                          r"(?:income|pay|salary|wages?)", t)) or \
         re.search(r"\bei\b[^%\d.;!?]{0,40}" + PCT, t)
+    ei_unreal = False                    # EI only mentioned as denied ("do not receive EI") or as a what-if
     if m:
-        out["ei_pct"], out["job_loss"] = float(m.group(1)), True
+        ei = _ei_state(t, m)
+        if partner:                                   # unchanged: partner cards are read below
+            out["ei_pct"], out["job_loss"] = float(m.group(1)), True
+        elif negated:
+            # the job loss is denied (or unclear): an EI share never turns it into one
+            ei_unreal = True
+            if ei == "real" and not affirmed:
+                out["unsupported"].append("EI share mentioned but the card says there was no job loss: "
+                                          "not applied")
+        elif ei == "negated":                         # "I lost my job and do not receive EI at 55%"
+            ei_unreal = True
+        elif ei == "hypothetical" and not affirmed:   # "if I qualify, EI would pay 55%" with no job loss stated
+            ei_unreal = True
+        else:
+            out["ei_pct"], out["job_loss"] = float(m.group(1)), True
     if out["job_loss"] and out["ei_pct"] is None:
         no_ei = re.search(r"(?:no|without|not eligible for|doesn't get|does not get|isn't eligible for)\s+(?:any\s+)?"
                           r"(?:ei|employment insurance)", t)
-        out["ei_pct"] = 0.0 if no_ei else (55.0 if re.search(r"\bei\b|employment insurance", t) else 0.0)
+        out["ei_pct"] = 0.0 if no_ei or ei_unreal else (55.0 if re.search(r"\bei\b|employment insurance", t) else 0.0)
     # --- other income changes (pay cut, fewer hours, raise)
     m = re.search(r"(?:pay|salary|wages?|hours|income)\s+(?:is\s+|are\s+|gets?\s+)?(?:cut|drops?|falls?|reduced|goes down|go down)"
                   r"[^.%\d]{0,15}" + PCT, t) or \
@@ -344,7 +375,11 @@ def parse_twist(text):
             affirmed, negated = job_loss_mentions(text)
             unclear = ("job loss unclear (the card both states and denies one): not applied, "
                        "lower the money-in setting by hand if it applies")
-            if r["job_loss"] and not d["job_loss"]:
+            if affirmed and negated and not r["job_loss"]:
+                # conflicting phrases (rules didn't apply a job loss either): surface it, don't pick a side
+                d["job_loss"], d["ei_pct"] = False, None
+                d["unsupported"].append(unclear)
+            elif r["job_loss"] and not d["job_loss"]:
                 if negated:                      # conflicting phrases: surface it, don't pick a side as fact
                     d["unsupported"].append(unclear)
                 else:                            # a clearly stated job loss Gemini missed

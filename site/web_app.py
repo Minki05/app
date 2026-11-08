@@ -421,12 +421,12 @@ def validate_request(path: str, q) -> dict:
             continue
         if isinstance(v, bool) or not isinstance(v, (int, float)):       # bool is an int in Python
             raise BadRequest(k, f"{k} must be a number.")
-        if not math.isfinite(v):
+        if isinstance(v, float) and not math.isfinite(v):   # ints are exact (any size): no float conversion
             raise BadRequest(k, f"{k} must be a finite number.")
+        if not lo <= v <= hi:                               # int vs float compares exactly, even 10**400
+            raise BadRequest(k, f"{k} must be between {lo:g} and {hi:g}.")
         if whole and v != int(v):
             raise BadRequest(k, f"{k} must be a whole number.")
-        if not lo <= v <= hi:
-            raise BadRequest(k, f"{k} must be between {lo:g} and {hi:g}.")
     for k in BOOL_FIELDS:
         if k in q and q[k] is not None and not isinstance(q[k], bool):
             raise BadRequest(k, f"{k} must be true or false.")

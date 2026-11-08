@@ -137,6 +137,25 @@ bad_obj = [
 for name, body, field in bad_obj:
     code, r = post("/api/simulate", body)
     check(f"{name} -> 400 field={field}", code == 400 and r.get("field") == field, (code, r))
+# huge integers: exact int range check, never a float conversion (was OverflowError)
+for k, v in (("target", 10 ** 400), ("target", -10 ** 400), ("cut", 10 ** 400), ("keep", -10 ** 400)):
+    try:
+        W.validate_request("/api/simulate", {"account_id": 20111, k: v})
+        res = "accepted"
+    except W.BadRequest as e:
+        res = e.field
+    except Exception as e:  # noqa: BLE001 - the regression being checked
+        res = f"{type(e).__name__}"
+    check(f"validate_request {k}={'-' if v < 0 else ''}10**400 -> range error on {k}", res == k, res)
+    code, r = post("/api/simulate", f'{{"account_id":20111,"{k}":{v}}}'.encode(), raw=True)
+    check(f"HTTP {k}={'-' if v < 0 else ''}10**400 -> 400 field={k}", code == 400 and r.get("field") == k
+          and "between" in r.get("error", ""), (code, r))
+code, r = post("/api/simulate", b'{"account_id":20111,"target":' + b"9" * 5000 + b"}", raw=True)
+check("HTTP 5,000-digit integer -> structured 400", code == 400 and r.get("error"), (code, r))
+code, r = post("/api/simulate", f'{{"account_id":{10 ** 400}}}'.encode(), raw=True)
+check("HTTP account_id=10**400 -> 404 (no such account)", code == 404, (code, r))
+code, r = post("/api/simulate", {"account_id": 20111, "target": 12, "keep": 0, "cut": 10 ** 9, "checked": True})
+check("largest allowed integers still 200", code == 200, (code, r))
 code, r = post("/api/twist", {"account_id": 20111, "text": 123})
 check("twist text = 123 -> 400 field=text", code == 400 and r.get("field") == "text", (code, r))
 code, r = post("/api/message", [])
@@ -180,6 +199,33 @@ for text, want in (("I lost my job. EI pays 55%. My rent goes up 10%.", dict(job
     r = agent.parse_rules(text)
     check(f"rules unchanged: {text[:45]!r}", {k: r[k] for k in want} == want, r)
 
+# an EI share must never turn a denied job loss back into one, and denied / what-if EI is not received
+EI_CASES = [
+    ("I have not lost my job and do not receive EI at 55%. My rent goes up 10%.",
+     dict(job_loss=False, ei_pct=None, bills_up_pct=10.0, other_income_change_pct=0.0), False),
+    ("I did not lose my job. My rent goes up 10%.",
+     dict(job_loss=False, ei_pct=None, bills_up_pct=10.0, other_income_change_pct=0.0), False),
+    ("I did not lose my job. If I did, EI would pay 55% of my income. My rent goes up 10%.",
+     dict(job_loss=False, ei_pct=None, bills_up_pct=10.0, other_income_change_pct=0.0), False),
+    ("I did not lose my job. My hours are cut by 20%.",
+     dict(job_loss=False, ei_pct=None, bills_up_pct=0.0, other_income_change_pct=-20.0), False),
+    ("I lost my job. EI pays 55%. My rent goes up 10%.", dict(job_loss=True, ei_pct=55.0, bills_up_pct=10.0), False),
+    ("I lost my job, no EI.", dict(job_loss=True, ei_pct=0.0), False),
+    ("I lost my job and do not receive EI at 55%.", dict(job_loss=True, ei_pct=0.0), False),
+    ("If they lose their job, EI pays 55% for 6 months. Do they make it?", dict(job_loss=True, ei_pct=55.0), False),
+    ("My husband lost his job; he earns 40% of our income.",
+     dict(job_loss=False, ei_pct=None, other_income_change_pct=-40.0), False),
+    ("I lost my job and get about 55% of my pay from EI. My rent and utilities are going up 15%.",
+     dict(job_loss=True, ei_pct=55.0, bills_up_pct=15.0), False),
+    ("I did not lose my job, but EI pays 55% of my income.", dict(job_loss=False, ei_pct=None), True),
+    ("I was not fired. I was laid off and my rent goes up 10%.",
+     dict(job_loss=False, ei_pct=None, bills_up_pct=10.0), True),
+]
+for text, want, warns in EI_CASES:
+    r = agent.parse_rules(text)
+    check(f"rules: {text[:58]!r}", {k: r[k] for k in want} == want and bool(r["unsupported"]) == warns,
+          ({k: r[k] for k in want}, r["unsupported"]))
+
 G = dict(job_loss=False, ei_pct=None, other_income_change_pct=0, bills_up_pct=10, extra_monthly_dollars=0,
          spending_change_pct=0, one_off_dollars=0, one_off_months_of_spending=0, windfall_dollars=0, starts_in_months=0,
          shock_lasts_months=0, income_after_pct=100, survive_months=None, question="auto", unsupported=[])
@@ -204,6 +250,41 @@ gemini_returns({**G, "bills_up_pct": 0})
 d, _ = agent.parse_twist("I was not fired. I was laid off and my rent goes up 10%.")
 check("card both denies and states a job loss -> not applied as fact, warned",
       d["job_loss"] is False and any("unclear" in w for w in d["unsupported"]), d)
+d, _ = agent.parse_twist("I was not fired. I was laid off and my rent goes up 10%.")
+check("mixed card: Gemini said no job loss -> stays off, warned once",
+      d["job_loss"] is False and sum("unclear" in w for w in d["unsupported"]) == 1, d)
+gemini_returns({**G, "job_loss": True, "ei_pct": 55})
+d, _ = agent.parse_twist("I was not fired. I was laid off and my rent goes up 10%.")
+check("mixed card: Gemini said job loss -> not applied as fact, warned",
+      d["job_loss"] is False and any("unclear" in w for w in d["unsupported"]), d)
+# Gemini reads the EI-negation cards correctly (no job loss): the rule check must not undo that
+EI_TEXTS = [c[0] for c in EI_CASES[:4]]
+for text in EI_TEXTS:
+    want_bills = 10 if "rent" in text else 0
+    want_inc = -20 if "hours" in text else 0
+    gemini_returns({**G, "bills_up_pct": want_bills, "other_income_change_pct": want_inc})
+    d, _ = agent.parse_twist(text)
+    check(f"Gemini 'no job loss' kept: {text[:45]!r}",
+          d["job_loss"] is False and d["ei_pct"] is None and not agent.ADDED and not d["unsupported"]
+          and d["bills_up_pct"] == want_bills and d["other_income_change_pct"] == want_inc, (d, agent.ADDED))
+    gemini_returns({**G, "bills_up_pct": 0, "other_income_change_pct": 0})    # Gemini missed the other shocks
+    d, _ = agent.parse_twist(text)
+    check(f"rules fill only the real shock, not a job loss: {text[:30]!r}",
+          d["job_loss"] is False and d["bills_up_pct"] == want_bills and d["other_income_change_pct"] == want_inc, d)
+gemini_returns({**G, "job_loss": True, "ei_pct": 55})
+d, _ = agent.parse_twist(EI_TEXTS[0])
+check("Gemini wrongly says job loss + EI 55% on the EI-negation card -> not applied, warned",
+      d["job_loss"] is False and d["ei_pct"] is None and d["unsupported"], d)
+gemini_returns(G)
+code, t = post("/api/twist", {"account_id": 20111, "text": EI_TEXTS[0]})
+check("/api/twist EI-negation card: money in 100%, bills +10%, no warning",
+      code == 200 and t["shock"]["keep"] == 100 and t["shock"]["bills"] == 10 and t["warn"] == [], (code, t))
+agent._gemini = lambda prompt, want_json=False: None                 # Gemini unavailable -> rule reader
+code, t = post("/api/twist", {"account_id": 20111, "text": EI_TEXTS[0]})
+check("/api/twist EI-negation card with rule reader only: money in 100%, bills +10%",
+      code == 200 and t["source"] == "rule-based reader" and t["shock"]["keep"] == 100
+      and t["shock"]["bills"] == 10, (code, t))
+gemini_returns({**G, "bills_up_pct": 0})
 d, _ = agent.parse_twist("They lose their job (EI at 55%) and their household bills go up 15% in the same month.")
 check("Gemini missed a clearly stated job loss -> rule check still fills it (listed)",
       d["job_loss"] is True and d["ei_pct"] == 55 and agent.ADDED, (d, agent.ADDED))
