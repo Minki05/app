@@ -283,6 +283,20 @@ t = S.twist(dict(account_id=20111, text="The furnace breaks and costs $4,000."))
 check("a repair WITH a cost uses that cost (read, not assumed)", t["shock"]["oneOff"] == 4000
       and {x["key"]: x for x in t["fields"]}["oneOff"]["status"] == "read", t["shock"])
 
+# Gemini's real wrong answer at the demo table (40% x 55% treated as the LOSS): the rules own this arithmetic
+import json as _json  # noqa: E402
+_bad = dict(job_loss=False, ei_pct=None, other_income_change_pct=-22, bills_up_pct=0, extra_monthly_dollars=0,
+            spending_change_pct=0, one_off_dollars=0, one_off_months_of_spending=0, windfall_dollars=0,
+            starts_in_months=0, shock_lasts_months=0, income_after_pct=100, survive_months=None, question="auto",
+            unsupported=["partner loses job and EI replaces 55% of their pay"])
+_saved = agent._gemini
+agent._gemini = lambda *a, **k: _json.dumps(_bad)
+t = S.twist(dict(account_id=20111, text="My partner earns 40% of our income and loses their job. "
+                                        "EI replaces 55% of their pay."))
+agent._gemini = _saved
+check("Gemini says -22% for partner 40% + EI 55%: corrected to 82% kept (rules do the arithmetic, shown)",
+      t["shock"]["keep"] == 82.0 and "worked out by the rules" in t["note"], (t["shock"]["keep"], t["note"]))
+
 print("\n10) Plans say WHEN they apply: now (today's income) or if the shock hits (income after it)")
 d = S.simulate(dict(account_id=20111, keep=55, target=6))
 fund = [p for p in d["plans"] if p["title"].startswith("Build an emergency fund")]

@@ -372,7 +372,8 @@ Return ONLY a JSON object with exactly these keys:
 - job_loss: true if the customer themself loses their job, else false
 - ei_pct: % of usual income paid by Employment Insurance after a job loss (e.g. 55); 0 if no EI; null if no job loss
 - other_income_change_pct: any OTHER change to income in %, e.g. pay cut 20% -> -20, fewer hours 30% -> -30,
-  raise 10% -> 10, partner loses a job and they earned 40% of household income -> -40 (if their share is not
+  raise 10% -> 10, partner loses a job and they earned 40% of household income -> -40; if EI then replaces 55% of
+  the partner's pay, the household loses 40% x (1 - 0.55) = 18% -> -18 (if their share is not
   given, use -50 and add "partner's share of income assumed to be half" to unsupported);
   a higher loan/mortgage payment of $X goes in extra_monthly_dollars; 0 if none
 - bills_up_pct: % increase in household bills, rent or utilities; 0 if none
@@ -455,11 +456,16 @@ def parse_twist(text):
                 d["job_loss"], d["ei_pct"] = False, None
                 d["unsupported"].append("the card says there was no job loss, so none was applied; "
                                         "lower the money-in setting by hand if it applies")
+            # partner's job loss: the household share and EI are arithmetic, so the rules do it, never the model
+            # (40% share, EI 55% of their pay -> household keeps 60% + 40% x 55% = 82%, a change of -18%)
             if re.search(r"\b(?:partner|spouse|husband|wife)\b", text.lower()) and not r["job_loss"] and \
-                    r["other_income_change_pct"] and d["job_loss"]:
+                    r["other_income_change_pct"] and any(u.startswith("partner") for u in r["unsupported"]):
+                if d["job_loss"] or abs(float(d["other_income_change_pct"] or 0) - r["other_income_change_pct"]) > 0.05:
+                    ADDED.append(f"partner's income worked out by the rules: {r['other_income_change_pct']:+g}%")
                 d["job_loss"], d["ei_pct"] = False, None
                 d["other_income_change_pct"] = r["other_income_change_pct"]
-                d["unsupported"] += [u for u in r["unsupported"] if u.startswith("partner")]
+                d["unsupported"] = [u for u in d["unsupported"] if "partner" not in u.lower()] + \
+                    [u for u in r["unsupported"] if u.startswith("partner")]
             for k in ("spending_change_pct", "bills_up_pct", "other_income_change_pct"):
                 if any("NOT happening" in u for u in r["unsupported"]) and not r[k] and d[k]:
                     d[k] = 0.0
