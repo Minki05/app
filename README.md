@@ -34,8 +34,8 @@ If Gemini is unavailable, the rule-based reader and a template message take over
 - `precompute.py` — builds `app_data/` from the raw CSVs (only step that reads transactions.csv)
 - `discovery.py` — reproduces every finding from the raw data (output in `discovery_output.txt`)
 - `check.py` — 61 automated checks: judges' example answers, twist-card phrasings, regression and statistical tests
-- `site/check_web.py` — 127 checks through the real web server and page
-- `site/check_guardrails.py` — 73 demo guardrails, run with AI switched off: screens agree after a plan is applied,
+- `site/check_web.py` — 128 checks through the real web server and page
+- `site/check_guardrails.py` — 87 demo guardrails, run with AI switched off: screens agree after a plan is applied,
   increase vs decrease is read correctly, no action is claimed to cause lower risk, only confirmed cuts count,
   unsaved money never counts as cash, AUC is described as ranking on a hold-out (not accuracy)
 - `app.py` — backup Streamlit front end on the same `core.py`

@@ -139,6 +139,15 @@ def _ei_state(t, m):
     return "real"
 
 
+CATEGORY = (r"groceries|grocery bills?|food(?: costs?| prices?)?|gas(?: prices?)?|fuel|gasoline|transit|"
+            r"phone bills?|childcare|daycare|insurance(?: premiums?)?|car insurance")
+
+
+def category_warning(cat, pct):
+    return (f"{cat} +{float(pct):g}%: the data doesn't show how much goes to {cat}, so this was not applied. "
+            f"Enter the extra cost per month under 'New monthly costs' if you know it")
+
+
 def parse_rules(text):
     """Backup reader: regular expressions for the common ways a twist card is phrased."""
     t = " " + text.lower().replace(",", "") + " "
@@ -187,6 +196,9 @@ def parse_rules(text):
         re.search(r"(?:cut|reduce)s?\s+(?:[\w']+\s+){0,2}(?:pay|salary|hours|income|wages?)\s+by\s+" + PCT, t)
     if m:
         out["other_income_change_pct"] = -float(m.group(1))
+    elif not out["job_loss"] and re.search(r"(?:income|pay|paycheque|paycheck|earnings)s?\s+(?:drops?|falls?|goes|go|is cut)"
+                                           r"\s+to\s+(?:zero|nothing|\$?0)\b|\bno income\b|\bzero income\b", t):
+        out["other_income_change_pct"] = -100.0
     m = re.search(r"(?:gets? a (?:pay )?raise|pay raise|pay rise|salary (?:goes up|rises|increases)|"
                   r"income (?:goes up|rises|increases))[^.%\d]{0,15}" + PCT, t)
     if m:
@@ -210,7 +222,12 @@ def parse_rules(text):
         out["bills_up_pct"] = float(m.group(1))
         t_wo_bills = t.replace(m.group(0), " ")
     # --- general spending change (inflation, prices)
-    m = re.search(r"(?:prices?|cost of living|inflation|spending|groceries)[^.%\d]{0,30}" + PCT, t_wo_bills)
+    # one category of spending (groceries, gas...): the data has no per-category amounts, so a % of it can't be
+    # turned into dollars. Flag it instead of applying it to all spending.
+    for m in re.finditer(r"\b(" + CATEGORY + r")\b[^.%\d]{0,30}" + PCT, t_wo_bills):
+        out["unsupported"].append(category_warning(m.group(1), m.group(2)))
+        t_wo_bills = t_wo_bills.replace(m.group(0), " ")
+    m = re.search(r"(?:prices?|cost of living|inflation|spending)[^.%\d]{0,30}" + PCT, t_wo_bills)
     if m:
         # direction: "decreases / drops / falls ... by 10%" after the word, or "cut / reduce ... spending" right
         # before it, is a decrease; anything else is an increase
@@ -319,7 +336,7 @@ Return ONLY a JSON object with exactly these keys:
   a higher loan/mortgage payment of $X goes in extra_monthly_dollars; 0 if none
 - bills_up_pct: % increase in household bills, rent or utilities; 0 if none
 - extra_monthly_dollars: NEW recurring costs per month in dollars (e.g. childcare $800/month -> 800); 0 if none
-- spending_change_pct: % change in overall spending, negative for a decrease (prices up 5% -> 5, spending decreases 10% -> -10); 0 if none
+- spending_change_pct: % change in overall spending, negative for a decrease (prices up 5% -> 5, spending decreases 10% -> -10); 0 if none. A change to ONE category only (groceries, gas, childcare...) is NOT overall spending: use 0 and add it to unsupported
 - one_off_dollars: total one-time costs in dollars (repairs, bills, emergencies); 0 if none
 - one_off_months_of_spending: one-time cost stated as months of typical spending (e.g. "a full month" -> 1); 0 if none
 - windfall_dollars: one-time money coming IN (bonus, tax refund, gift, severance); 0 if none
@@ -395,6 +412,13 @@ def parse_twist(text):
                 d["job_loss"], d["ei_pct"] = False, None
                 d["unsupported"].append("the card says there was no job loss, so none was applied; "
                                         "lower the money-in setting by hand if it applies")
+            cats = [m for m in re.finditer(r"\b(" + CATEGORY + r")\b[^.%\d]{0,30}" + PCT, text.lower())]
+            general = re.search(r"prices?|cost of living|inflation|spending", re.sub(
+                r"\b(?:" + CATEGORY + r")\b", " ", text.lower()))
+            if cats and not general and d["spending_change_pct"]:
+                d["spending_change_pct"] = 0.0
+                for m in cats:
+                    d["unsupported"].append(category_warning(m.group(1), m.group(2)))
             for k in CROSS_CHECK:
                 if r[k] and not d[k]:
                     d[k] = r[k]
@@ -474,19 +498,40 @@ def template_message(facts):
                          f"({_dollars(left)} short).")
     elif isinstance(r, str):
         lines.append("Good news: your money coming in would still cover your usual spending.")
-    else:
+    elif facts.get("meets_target") is None:
         short = "short of" if r < facts["survive"] else "meeting"
         lines.append(f"Your savings would last about {r} months, {short} the goal of {facts['survive']} months.")
+    else:
+        lines.append(f"If the change never ended, your savings would last about {r} months.")
     mbm = facts.get("month_by_month")
     if mbm is not None:
-        lines.append(f"Counting when the shock starts and ends, your money runs out in about {mbm} months."
-                     if not isinstance(mbm, str) else "Counting when the shock starts and ends, your money does not run out.")
+        goal = ("meeting" if facts.get("meets_target") else "short of") + f" the goal of {facts['survive']} months"
+        lines.append(f"Counting when the shock starts and ends, your money runs out in about {mbm} months, {goal}."
+                     if not isinstance(mbm, str) else
+                     f"Counting when the shock starts and ends, your money does not run out, {goal}.")
+    plan_line = _plan_line(facts)
+    if plan_line:
+        lines.append(plan_line)
     if facts["steps"]:
         lines.append("Here is what we suggest, in order:")
         for i, (step, bank) in enumerate(facts["steps"][:3], 1):
             lines.append(f"{i}. {step} {bank_offer(bank)}")
     lines.append("We're here to help you set any of this up.")
     return "\n".join(lines)
+
+
+def _plan_line(facts):
+    """The result with the changes the customer confirmed (never a preview)."""
+    pl = facts.get("plan")
+    if not pl:
+        return ""
+    what = " and ".join(x for x in (f"cutting ${pl['cut']:,} a month" if pl["cut"] else "",
+                                    f"${pl['extra']:,} a month extra coming in" if pl["extra"] else "") if x)
+    r = str(pl["runway"])
+    lasts = ("money coming in would cover your spending" if r.startswith("no shortfall")
+             else f"your savings would last about {r.split()[0]} months")
+    goal = "meeting" if pl["meets"] else "still short of"
+    return f"With the change you confirmed ({what}), {lasts}, {goal} the goal of {facts['survive']} months."
 
 
 def write_message(facts):
@@ -505,6 +550,8 @@ def write_message(facts):
                        f"({_dollars(left)} short).")
     elif isinstance(r, str):
         outlook = "After the shock, money coming in still covers usual spending, so savings are not used up."
+    elif facts.get("meets_target") is not None:
+        outlook = f"If the change never ended, savings would last about {r} months."
     else:
         verdict = "which is shorter than" if r < facts["survive"] else "which meets"
         outlook = (f"After the shock, savings would last about {r} months, {verdict} "
@@ -520,14 +567,20 @@ def write_message(facts):
         "steps_in_order": [f"{step} {bank_offer(bank)}" for step, bank in facts["steps"][:4]],
     }
     if facts.get("month_by_month") is not None:
+        goal = ("which meets" if facts.get("meets_target") else "which is shorter than") + \
+            f" the goal of lasting {facts['survive']} months"
         clean["month_by_month_note"] = (f"Counting when the shock starts and ends, money runs out in about "
-                                        f"{facts['month_by_month']} months" if not isinstance(facts["month_by_month"], str)
-                                        else "Counting when the shock starts and ends, money does not run out")
+                                        f"{facts['month_by_month']} months, {goal}"
+                                        if not isinstance(facts["month_by_month"], str)
+                                        else f"Counting when the shock starts and ends, money does not run out, {goal}")
+    if _plan_line(facts):
+        clean["with_the_plan_the_customer_confirmed"] = _plan_line(facts)
     prompt = f"""You are a friendly, plain-spoken banking assistant writing to one customer.
 Write a short message (max 120 words). Start with "Hi there," (never use an account number).
 Rules:
 - Use ONLY the facts below. Do not invent, round or change any number.
 - Write in everyday words: never copy technical labels such as "no shortfall", "120+" or "runway".
+- If a confirmed-plan result is given, say it right after the outlook (before -> with the plan).
 - State the outlook exactly as given; do not say the customer "can survive" the goal if the outlook says it is shorter.
 - Keep every condition in a step (for example "Once the monthly deficit is closed").
 - Bank support is only something to ask about: never say the bank has approved, pre-approved, will provide or

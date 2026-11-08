@@ -71,6 +71,28 @@ for acc in ACCOUNTS:
     elif d["need"] is not None:
         check(f"{acc}: plan covers the need, so no text asks for more", "still need another" not in t, t[:200])
 
+print("\n1b) The customer message says what the confirmed plan does, not only the 'before' number")
+d = S.simulate(dict(account_id=20111, keep=55, target=6, checked=True, cut=2178))
+check("message: before 3.4 months, then 6.0 months with the confirmed cut, meeting the goal",
+      "about 3.4 months" in d["message"] and "With the change you confirmed (cutting $2,178 a month)" in d["message"]
+      and "about 6.0 months, meeting the goal of 6 months" in d["message"], d["message"])
+d = S.simulate(dict(account_id=20111, keep=55, target=6, preview_cut=2178))
+check("message: a preview is not described as the customer's plan", "you confirmed" not in d["message"], d["message"])
+
+print("\n1c) A shock that ends: the target verdict follows the month-by-month balance")
+d = S.simulate(dict(account_id=20111, keep=0, target=4, lasts=1, after_pct=100))
+check("20111, no income for 1 month then back to 100%: lasts the 4-month target (runs out ~5.0 months)",
+      d["lasts"] is True and d["short_by"] == 0 and abs(d["timed"]["out"] - 4.99) < 0.05, (d["lasts"], d["timed"]["out"]))
+check("same case: the message agrees (meets the 4-month goal)", "meeting the goal of 4 months" in d["message"], d["message"])
+d = S.simulate(dict(account_id=20111, keep=0, target=6, lasts=1, after_pct=100))
+check("same case with a 6-month target: short, and short by the balance below $0 at month 6",
+      d["lasts"] is False and d["short_by"] > 0 and d["short_by"] == -min(d["timed"]["path"][1:7]), (d["lasts"], d["short_by"]))
+d = S.simulate(dict(account_id=20111, keep=55, target=6))
+check("no timing set: the verdict is the judges' runway as before (3.4 < 6 → short)", d["lasts"] is False and d["timed"] is None)
+r = agent.parse_rules("My income drops to zero for one month, then goes back to normal.")
+check("'income drops to zero for one month, then back to normal' is read: -100%, lasts 1, then 100%",
+      r["other_income_change_pct"] == -100 and r["shock_lasts_months"] == 1 and r["income_after_pct"] == 100, r)
+
 print("\n2) Plain-English input: direction, amount and timing are read, nothing is dropped silently")
 cases = [("My spending decreases by 10%.", "spending_change_pct", -10.0),
          ("They cut their spending by 10%.", "spending_change_pct", -10.0),
@@ -104,8 +126,25 @@ for acc in ACCOUNTS:
     t = texts(d)
     check(f"{acc}: no 'flexible spending' wording", "flexible spending" not in t.lower(), "found")
     check(f"{acc}: nothing counts as confirmed until the customer confirms it", d["confirmed"] == 0, d["confirmed"])
-check("chart button says preview, and that it counts only once confirmed",
-      "Preview this cut on the chart" in JS and "only once the customer confirms" in JS)
+check("chart button says preview, and a separate button records the customer's confirmation",
+      "Preview this cut on the chart" in JS and "Customer confirms this cut" in JS
+      and "not counted in the plan until the customer confirms" in JS)
+d = S.simulate(dict(account_id=20111, keep=55, target=6, preview_cut=2178))
+check("a preview draws the cut on the chart but counts nothing (confirmed $0, plan not active)",
+      d["confirmed"] == 0 and not d["plan_active"] and d["preview"]["display"] == "6.0" and d["remaining"] > 0,
+      (d["confirmed"], d["plan_active"], d["preview"]))
+d = S.simulate(dict(account_id=20111, keep=55, target=6, checked=True, cut=2178, preview_cut=999))
+check("once confirmed, any preview is ignored", d["preview"] is None and d["confirmed"] == 2178, d["preview"])
+
+print("\n4b) Single spending categories are not applied to all spending")
+for text in ("My groceries increase by 10%.", "Gas prices go up 20%.", "Childcare costs rise 15%."):
+    r = agent.parse_rules(text)
+    check(f"{text!r}: not applied to total spending, and flagged", r["spending_change_pct"] == 0 and r["unsupported"]
+          and "New monthly costs" in r["unsupported"][0], r)
+r = agent.parse_rules("Prices rise 4% and groceries go up 10%.")
+check("general prices still apply (+4%) while groceries are flagged", r["spending_change_pct"] == 4 and r["unsupported"], r)
+t = S.twist(dict(account_id=20111, text="My groceries increase by 10%."))
+check("screen: groceries card adds no monthly cost and shows the warning", t["shock"]["extraOut"] == 0 and t["warn"], t)
 
 print("\n5) Money not yet saved is never added to today's cash")
 for acc in ACCOUNTS:

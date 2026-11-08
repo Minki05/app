@@ -466,16 +466,18 @@ const planFor = () => state; const reduced = true; let sims = 0;
 const syncControls = () => {}; const simulate = () => { sims++; }; const goStep = () => {};
 const $ = () => ({scrollIntoView() {}});
 const data = JSON.parse(require("fs").readFileSync(0, "utf8"));
-const S = {acct: 20111, sim: data};
+const S = {acct: 20111, sim: data, preview: new Map()};
 """ + snippet + """
 const out = {rows: [], sentBefore: sims};
 for (const pl of data.plans) {
   const key = pl.title.replace(/[\\d$,.%]+/g, "#");
   const html = applyRow(pl, key);
   applyPlan(key);
-  out.rows.push({title: pl.title, button: (html.includes("Show this plan on the chart") || html.includes("Preview this cut on the chart")), note: html.includes("isn't saved yet"),
-                 changesRisk: html.includes("Changes risk"), state: {...state}});
-  state.checked = false; state.cut = 0;
+  const afterPreview = {...state}, preview = S.preview.get(20111) || 0;
+  confirmPlan(key);
+  out.rows.push({title: pl.title, button: html.includes("Preview this cut on the chart"), note: html.includes("isn't saved yet"),
+                 changesRisk: html.includes("Changes risk"), afterPreview, preview, state: {...state}});
+  state.checked = false; state.cut = 0; S.preview.clear();
 }
 out.state = state; out.sims = sims;
 console.log(JSON.stringify(out));
@@ -492,10 +494,13 @@ console.log(JSON.stringify(out));
         check("page: savings goal shows the note, no 'Show this plan' button, no 'Changes risk'",
               f_.get("note") and not f_.get("button") and not f_.get("changesRisk"), f_)
         check("page: clicking the savings goal changes nothing (no cash, no cut)",
-              f_.get("state") == {"checked": False, "cut": 0, "target": 6}, f_)
+              f_.get("state") == {"checked": False, "cut": 0, "target": 6} and not f_.get("preview"), f_)
         cutp = [r for t, r in rows.items() if t.startswith("Shock plan: cut")]
-        check("page: the monthly cut plan keeps its button and applies only the cut",
-              cutp and cutp[0]["button"] and cutp[0]["state"]["checked"] is True and cutp[0]["state"]["cut"] > 0
+        check("page: 'Preview' only draws the cut: nothing is confirmed or counted",
+              cutp and cutp[0]["button"] and cutp[0]["preview"] > 0
+              and cutp[0]["afterPreview"] == {"checked": False, "cut": 0, "target": 6}, cutp)
+        check("page: 'Customer confirms this cut' is what puts the cut in the plan (and only the cut)",
+              cutp and cutp[0]["state"]["checked"] is True and cutp[0]["state"]["cut"] == cutp[0]["preview"]
               and set(cutp[0]["state"]) == {"checked", "cut", "target"}, cutp)
     body = src[src.index("function simBody"):src.index("// ------", src.index("function simBody"))]
     check("page request body no longer carries plan_buffer", "plan_buffer" not in body and "planBuffer" not in src)

@@ -249,6 +249,10 @@ class Store:
         # as after the shock. Savings goals are future money and are never added here.
         planned = E.runway(p.B, p.I, p.S, p.H, E.Shock(keep, bills, net, cut=cut, extra_income=extra,
                                                          extra_out=extra_out))
+        # a preview draws a cut on the chart before the customer confirms it; it never counts as confirmed
+        preview_cut = 0.0 if checked else E.applied_cut(max(float(q.get("preview_cut", 0) or 0), 0.0), after.spending)
+        preview = None if preview_cut <= 0 else E.runway(p.B, p.I, p.S, p.H, E.Shock(
+            keep, bills, net, cut=preview_cut, extra_income=extra, extra_out=extra_out))
         need = E.improvement_needed(after.gap, after.buffer_left, target)
         confirmed = cut + extra
         remaining = None if need is None else max(need - confirmed, 0.0)
@@ -256,7 +260,7 @@ class Store:
         short_by = max(target * max(after.gap, 0) - max(after.buffer_left, 0), 0.0)
 
         horizon = 12
-        for r in (after, planned):
+        for r in (after, planned) + ((preview,) if preview else ()):
             if r.status == "shortfall" and r.raw:
                 horizon = max(horizon, min(math.ceil(r.raw * 1.25), 60))
         fund = E.emergency_fund(p.S, p.B, kmon, save)
@@ -279,6 +283,12 @@ class Store:
             else:
                 horizon = max(horizon, min(sc["start_in"] + sc["lasts"] + 6, 60))
             timed["path"] = [num(v) for v in path[:horizon + 1]]
+            # the target verdict follows the month-by-month balance (the headline runway stays the judges'
+            # permanent-change number): it lasts if the balance never goes below $0 within the target months
+            low = min(path[1:target + 1]) if len(path) > target else min(path)
+            lasts = bool(low >= 0 or (out is not None and out >= target))
+            short_by = 0.0 if lasts else -float(low)
+            timed["target_basis"] = True
         one_off_only = keep >= 1 and bills == 0 and extra_out == 0 and one_off > 0
         question = sc["question"] if sc["question"] != "auto" else ("can_pay" if one_off_only else "last_months")
         if question == "can_pay" and one_off <= 0:
@@ -301,7 +311,13 @@ class Store:
                      left=None if can_pay is None else can_pay["left"],
                      month_by_month=None if timed is None else (round(timed["out"], 1) if timed["out"] is not None
                                                                 else "does not run out"),
-                     steps=[(pl["do"], pl["bank"]) for pl in plans])
+                     steps=[(pl["do"], pl["bank"]) for pl in plans],
+                     meets_target=lasts if timed else None,
+                     plan=None if confirmed <= 0 else dict(
+                         cut=round(cut), extra=round(extra),
+                         runway=runway_json(planned)["display"],
+                         meets=planned.status in ("no_shortfall", "capped") or (
+                             planned.status == "shortfall" and planned.raw >= target)))
         projection_extra = {"timed": timed["path"] if timed else None}
         return {
             "question": question, "can_pay": can_pay, "timed": timed, "shock_text": sc["text"],
@@ -310,7 +326,8 @@ class Store:
             "message": agent.template_message(facts),
             "account_id": aid, "target": target, "plan_active": confirmed > 0,
             "base": runway_json(base), "after": runway_json(after), "planned": runway_json(planned),
-            "lasts": lasts, "short_by": num(short_by),
+            "preview": None if not preview else runway_json(preview), "preview_cut": num(preview_cut),
+            "lasts": bool(lasts), "short_by": num(short_by),
             "need": num(need), "confirmed": num(confirmed), "applied_cut": num(cut),
             "entered_cut": num(entered_cut), "cut_clamped": entered_cut > cut, "extra": num(extra),
             "remaining": num(remaining), "one_off": num(one_off),
@@ -318,6 +335,8 @@ class Store:
                            "today": [num(v) for v in E.projection(base.buffer_left, base.gap, horizon)],
                            "shock": [num(v) for v in E.projection(after.buffer_left, after.gap, horizon)],
                            "plan": [num(v) for v in E.projection(planned.buffer_left, planned.gap, horizon)],
+                           "preview": None if not preview else
+                           [num(v) for v in E.projection(preview.buffer_left, preview.gap, horizon)],
                            **projection_extra},
             "fund": fund_json(fund), "fund_after": fund_json(fund_after), "kmon": kmon, "save": num(save),
             "response": {"group": response.group, "label": RP.LABELS[response.group]},

@@ -81,6 +81,7 @@
     acct: null, data: null, sim: null,
     preset: "ei55", shock: { keep: 55, bills: 0, oneOff: 0, ...NO_EXTRA }, question: "last_months", label: "job loss (EI 55%)",
     plans: new Map(), peerMode: "income", msgKey: null, openTok: 0,
+    preview: new Map(),   // account → monthly cut drawn on the chart only (not confirmed, never counted)
   };
   const planFor = (id) => {
     if (!S.plans.has(id)) S.plans.set(id, { target: 6, checked: false, cut: 0, extra: 0, kmon: 3, save: 0 });
@@ -432,7 +433,10 @@
     $("#twist-go").addEventListener("click", readTwist);
     $("#twist-text").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); readTwist(); } });
     $("#msg-go").addEventListener("click", rewriteMessage);
-    $("#plans").addEventListener("click", (e) => { const b = e.target.closest("[data-apply]"); if (b) applyPlan(b.dataset.apply); });
+    $("#plans").addEventListener("click", (e) => {
+      const c = e.target.closest("[data-confirm]"); if (c) { confirmPlan(c.dataset.confirm); return; }
+      const b = e.target.closest("[data-apply]"); if (b) applyPlan(b.dataset.apply);
+    });
     $$(".theme-btn").forEach((b) => b.addEventListener("click", toggleTheme));
     $("#r-bills").addEventListener("input", (e) => { S.shock.bills = Number(e.target.value); onShock(); });
     $("#r-oneoff").addEventListener("input", (e) => { S.shock.oneOff = Number(e.target.value); onShock(); });
@@ -481,7 +485,8 @@
     const pl = planFor(S.acct), sh = S.shock;
     return { account_id: S.acct, keep: sh.keep, bills_pct: sh.bills, one_off: sh.oneOff, extra_out: sh.extraOut,
       windfall: sh.windfall, start_in: sh.startIn, lasts: sh.lasts, after_pct: sh.afterPct, question: S.question,
-      label: S.label, target: pl.target, checked: pl.checked, cut: pl.cut, extra: pl.extra, kmon: pl.kmon, save: pl.save };
+      label: S.label, target: pl.target, checked: pl.checked, cut: pl.cut, extra: pl.extra, kmon: pl.kmon, save: pl.save,
+      preview_cut: pl.checked ? 0 : (S.preview.get(S.acct) || 0) };
   }
 
   // ---------------------------------------------------------------- twist card (Gemini, rule-based backup)
@@ -566,11 +571,13 @@
       else { v.className = "verdict no"; v.innerHTML = `${no}${src[0].toUpperCase() + src.slice(1)} (${money(cp.have)}) can't cover ${money(cp.cost)} · ${-cp.left < 0.5 ? "under $1" : money(-cp.left)} short`; }
     } else if (s.question === "how_long") {
       v.className = "verdict " + (s.lasts ? "yes" : "no");
-      v.innerHTML = `${s.lasts ? ok : no}Money lasts ${esc(a.headline.toLowerCase())}`;
+      const lastsFor = s.timed ? (s.timed.out != null ? `${s.timed.out.toFixed(1)} months (month by month)` : "past the timeline (month by month)")
+        : a.headline.toLowerCase();
+      v.innerHTML = `${s.lasts ? ok : no}Money lasts ${esc(lastsFor)}`;
     }
-    else if (s.lasts) { v.className = "verdict yes"; v.innerHTML = `${ok}Covers the ${t}-month target`; }
+    else if (s.lasts) { v.className = "verdict yes"; v.innerHTML = `${ok}Covers the ${t}-month target${s.timed ? " · month by month" : ""}`; }
     else if (a.status === "buffer_gone") { v.className = "verdict no"; v.innerHTML = `${no}No cushion to draw on`; }
-    else { v.className = "verdict no"; v.innerHTML = `${no}Short of ${t} months by ${esc(money(s.short_by))}`; }
+    else { v.className = "verdict no"; v.innerHTML = `${no}Short of ${t} months by ${esc(money(s.short_by))}${s.timed ? " · month by month" : ""}`; }
     const tm = $("#runway-timed");
     if (s.timed) {
       const ends = s.timed.lasts ? `lasts ${s.timed.lasts} months, then money in at ${+s.timed.after_pct.toFixed(1)}%` : "ongoing";
@@ -581,8 +588,13 @@
     } else tm.hidden = true;
     swapText($("#cmp-today"), b.headline);
     swapText($("#cmp-shock"), a.headline);
-    swapText($("#cmp-plan"), s.plan_active ? pl.headline : "No changes yet");
+    swapText($("#cmp-plan"), s.plan_active ? pl.headline : s.preview ? `Preview: ${s.preview.headline}` : "No changes yet");
     $("#cmp-plan").classList.toggle("empty", !s.plan_active);
+    // a preview belongs to one plan amount; if the shock or target changed that amount, drop the stale preview
+    const pv = S.preview.get(S.acct);
+    if (pv && !(s.plans || []).some((x) => x.apply && x.apply.cut != null && Math.ceil(x.apply.cut) === pv)) {
+      S.preview.delete(S.acct); simulate();
+    }
 
     renderGap(); renderGuide(); renderTable(); renderBackup(); renderTrajectory(); renderPlans(); renderRisk(); renderMessage();
   }
@@ -714,15 +726,16 @@
 
   function renderTrajectory(animate = true) {
     const box = $("#traj"), sim = S.sim, s = sim.projection, n = s.months.length - 1;
-    const showPlan = !!sim.plan_active;
+    const showPlan = !!sim.plan_active || !!sim.preview;
     $("#lg-timed").hidden = !s.timed;
     $(".lg-plan").parentElement.style.opacity = showPlan ? 1 : .4;
     if (!box.clientWidth) { T.dirty = true; return; }   // dashboard hidden: draw at the real size when it shows
     T.dirty = false;
     const W = box.clientWidth, H = box.clientHeight || 320, m = { l: 60, r: 18, t: 36, b: 44 };
     box._w = W;
-    const to = { today: s.today, shock: s.shock, plan: showPlan ? s.plan : s.shock };
-    const vals = s.today.concat(s.shock, showPlan ? s.plan : [], s.timed || [], [0]);
+    const planLine = sim.plan_active ? s.plan : sim.preview ? s.preview : s.shock;
+    const to = { today: s.today, shock: s.shock, plan: planLine };
+    const vals = s.today.concat(s.shock, showPlan ? planLine : [], s.timed || [], [0]);
     // focus on the cushion and where it reaches $0: floor at −35% of the cushion, top stretches to fit every line
     const B = S.data.profile.B, maxV = Math.max(...vals);
     let y0, y1, ticks;
@@ -879,9 +892,13 @@
     '<span class="stat">$1</span> <span class="ci">($2 · CI $3)</span>');
   // a monthly spending cut can be put on the chart; savings goals are future money and are never added to
   // today's cash (the server says so in goal_note); the other plans change risk only, and say so
-  const isApplied = (pl) => {
+  const isApplied = (pl) => {           // confirmed by the customer: counts in the plan
     const p = planFor(S.acct), a = pl.apply;
     return !!(a && a.cut != null && p.checked && p.cut === Math.ceil(a.cut));
+  };
+  const isPreview = (pl) => {           // drawn on the chart only: not confirmed, never counted
+    const p = planFor(S.acct), a = pl.apply;
+    return !!(a && a.cut != null && !p.checked && S.preview.get(S.acct) === Math.ceil(a.cut));
   };
   function applyRow(pl, key) {
     if (pl.goal_note) return `<p class="apply-note">${esc(pl.goal_note)}</p>`;
@@ -889,23 +906,38 @@
       return pl.kind === "safety" || pl.new == null ? ""
         : `<p class="apply-note">Changes risk, not the month-to-month cash flow, so the runway chart stays the same.</p>`;
     }
-    const on = isApplied(pl), s = S.sim;
-    const result = on ? `<span class="apply-result">${esc(s.after.headline)} → <b>${esc(s.planned.headline)}</b> with ${esc(pl.apply.label)}</span>` : "";
-    return `<div class="apply-row"><button type="button" class="apply-btn${on ? " on" : ""}" data-apply="${esc(key)}">
-      ${on ? "✓ Previewing on the chart" : "Preview this cut on the chart"}</button>${result}</div>
-      <p class="apply-note">A preview: it counts in the plan only once the customer confirms they can make this cut.</p>`;
+    const on = isApplied(pl), pv = isPreview(pl), s = S.sim;
+    if (on) {
+      return `<div class="apply-row"><button type="button" class="apply-btn on" data-apply="${esc(key)}">✓ Confirmed · in the plan</button>
+        <span class="apply-result">${esc(s.after.headline)} → <b>${esc(s.planned.headline)}</b> with ${esc(pl.apply.label)}</span></div>
+        <p class="apply-note">The customer confirmed this cut, so it counts in the plan. Click to remove it.</p>`;
+    }
+    const result = pv && s.preview ? `<span class="apply-result">${esc(s.after.headline)} → <b>${esc(s.preview.headline)}</b> with ${esc(pl.apply.label)} (preview)</span>` : "";
+    return `<div class="apply-row"><button type="button" class="apply-btn${pv ? " on" : ""}" data-apply="${esc(key)}">
+      ${pv ? "✓ Previewing on the chart" : "Preview this cut on the chart"}</button>
+      ${pv ? `<button type="button" class="apply-btn" data-confirm="${esc(key)}">Customer confirms this cut</button>` : ""}${result}</div>
+      <p class="apply-note">A preview only: it is not counted in the plan until the customer confirms they can make this cut.</p>`;
   }
   function applyPlan(key) {
     const pl = (S.sim.plans || []).find((x) => x.title.replace(/[\d$,.%]+/g, "#") === key);
     if (!pl || !pl.apply || pl.apply.cut == null) return;   // only a monthly cut goes on the chart
-    const p = planFor(S.acct), on = isApplied(pl);
-    p.checked = false; p.cut = 0;                             // one plan at a time
-    if (!on) { p.checked = true; p.cut = Math.ceil(pl.apply.cut); }     // round up: never just short
+    const p = planFor(S.acct), on = isApplied(pl) || isPreview(pl);
+    if (isApplied(pl)) { p.checked = false; p.cut = 0; }      // remove a confirmed cut
+    S.preview.delete(S.acct);                                 // one plan at a time
+    if (!on) S.preview.set(S.acct, Math.ceil(pl.apply.cut));  // preview only: round up, never just short
     syncControls(); simulate();
     if (!on) {                                // the chart lives on step 1: go there and watch the plan line draw
       goStep(1);
       setTimeout(() => $("#traj").scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" }), reduced ? 50 : 850);
     }
+  }
+
+  function confirmPlan(key) {             // the customer said yes: now it counts in the plan
+    const pl = (S.sim.plans || []).find((x) => x.title.replace(/[\d$,.%]+/g, "#") === key);
+    if (!pl || !pl.apply || pl.apply.cut == null) return;
+    const p = planFor(S.acct);
+    p.checked = true; p.cut = Math.ceil(pl.apply.cut); S.preview.delete(S.acct);
+    syncControls(); simulate();
   }
 
   // One plan per row: rank · what to do and why · the evidence. Every number is an API value, only formatted here.
