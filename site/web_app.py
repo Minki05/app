@@ -238,11 +238,12 @@ class Store:
         extra = max(float(q.get("extra", 0)), 0.0)
         kmon = int(q.get("kmon", 3))
         save = max(float(q.get("save", 0)), 0.0)
+        plan_buffer = min(max(float(q.get("plan_buffer", 0) or 0), 0.0), 1e8)   # savings added by a chosen plan
 
         base = E.runway(p.B, p.I, p.S, p.H)
         after = E.runway(p.B, p.I, p.S, p.H, E.Shock(keep, bills, net, extra_out=extra_out))
         cut = E.applied_cut(entered_cut, after.spending)
-        planned = E.runway(p.B, p.I, p.S, p.H, E.Shock(keep, bills, net, cut=cut, extra_income=extra,
+        planned = E.runway(p.B, p.I, p.S, p.H, E.Shock(keep, bills, net - plan_buffer, cut=cut, extra_income=extra,
                                                          extra_out=extra_out))
         need = E.improvement_needed(after.gap, after.buffer_left, target)
         confirmed = cut + extra
@@ -298,7 +299,8 @@ class Store:
             "risk": {"base": num(risk), "auc": num(core.AUC)},
             "plans": [plan_json(pl) for pl in plans],
             "message": agent.template_message(facts),
-            "account_id": aid, "target": target,
+            "account_id": aid, "target": target, "plan_active": confirmed > 0 or plan_buffer > 0,
+            "plan_buffer": num(plan_buffer),
             "base": runway_json(base), "after": runway_json(after), "planned": runway_json(planned),
             "lasts": lasts, "short_by": num(short_by),
             "need": num(need), "confirmed": num(confirmed), "applied_cut": num(cut),
@@ -323,7 +325,8 @@ def plan_json(pl: dict) -> dict:
     return {"pill": text, "kind": kind, "title": pl["title"], "do": pl["do"], "you": pl["you"], "you_c": pl["you_c"],
             "data": pl["data"], "bank": pl["bank"], "start": num(pl.get("start")),
             "new": num(pl["new"]) if pl["new"] is not None else None,
-            "red": num(pl["red"]) if pl["red"] is not None else None, "test": pl.get("test", ""),
+            "red": num(pl["red"]) if pl["red"] is not None else None, "test": pl.get("test", ""), "track": pl.get("track", ""),
+            "apply": None if not pl.get("apply") else {k: (num(v) if k != "label" else v) for k, v in pl["apply"].items()},
             "sig": bool(pl.get("sig"))}
 
 

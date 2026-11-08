@@ -449,6 +449,7 @@ for i, pl in enumerate(plans, 1):
           <div class="title">{pl['title']}</div>
           <div class="do">{bold_numbers(pl['do'])}</div>
           <div class="why"><span>For this customer</span>{pl['you']}</div>
+          {f'<div class="why"><span>Their own history</span>{pl["track"]}</div>' if pl.get("track") else ""}
           <div class="why"><span>In the data</span>{fmt_evidence(pl['data'])}</div>
           <div class="why"><span>What Tangerine can do</span>{pl['bank']}</div>
           {model}

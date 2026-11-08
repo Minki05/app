@@ -1,55 +1,52 @@
-# Resilience Engine — Tangerine track, Sheridan Datathon 2026
+# Resilience Rewired — Tangerine track, Sheridan Datathon 2026
 
-Pick any customer, apply a shock, get a personal plan, and see **why** each step is recommended:
-the customer's own numbers plus what actually happened to similar customers in the data.
+Pick any customer, apply a shock in plain English, and get a plan ranked by what actually happened to
+similar customers: every step shows the customer's own numbers, the evidence (rates, 95% CIs, p-values)
+and what the bank can do.
 
-## Run the app
+## Run it
 ```bash
 pip install -r requirements.txt
-streamlit run app.py
+python site/web_app.py          # main app → http://127.0.0.1:8600
 ```
-`app_data/` is already built. To rebuild it from the raw data (put the CSVs in `data/`):
-```bash
-python precompute.py
-```
+Backup front end (same engine): `streamlit run app.py`
+
+`app_data/` is already built, so the app runs without the raw data. With the raw CSVs in `data/`,
+the web app reads `monthly_summary.csv`, `loans.csv`, `dispositions.csv` and `clients.csv` directly, and
+`python precompute.py` rebuilds `app_data/`.
 
 ## Optional: Gemini
-The app works without any AI key. To let Gemini read twist cards and write customer messages, create
+Everything works without an AI key. To let Gemini read twist cards and rewrite the customer message, create
 `.streamlit/secrets.toml` (never commit it):
 ```toml
 GEMINI_API_KEY = "your-key-from-aistudio.google.com"
 GEMINI_MODEL = "gemini-3.7-flash,gemini-3.5-flash-lite,gemini-3.8-flash"   # tried in order
 ```
-If Gemini is missing or fails, a rule-based reader and a template take over. Gemini never calculates numbers.
+Gemini reads the card, then a rule-based reader checks it and fills in anything Gemini missed (shown on screen).
+If Gemini is unavailable, the rule-based reader and a template message take over. Gemini never calculates numbers.
 
 ## Files
-- `app.py` — Streamlit app (know the customer → shock → plan with reasons; Advisor and Customer views)
-- `agent.py` — reads twist cards in plain English and writes the customer message (Gemini with rule-based fallback)
+- `site/` — web app (design by our teammate; light and dark mode)
+  - `web_app.py` — API + static server · `engine.py` — the judges' formulas (I, F, S, B, H, P, runway)
+  - `web/` — the page (HTML, CSS, JS)
+- `core.py` — risk model, evidence from similar customers, ranked plans, significance tests, the six findings
+- `agent.py` — twist-card reader (Gemini + rule-based cross-check) and customer message
 - `precompute.py` — builds `app_data/` from the raw CSVs (only step that reads transactions.csv)
-- `engine.py` — the same engine as a notebook script (prints plans)
-- `discovery.py` — reproduces every finding from the raw data (feature screen with FDR, main finding, loan-default replication, leakage check, what doesn't matter)
-- `validation.py` — evidence behind every recommendation (rates, 95% CIs, p-values, risk model, AUC)
+- `discovery.py` — reproduces every finding from the raw data (output in `discovery_output.txt`)
+- `check.py` — 52 automated checks: judges' example answers, twist-card phrasings, regression and statistical tests
+- `app.py` — backup Streamlit front end on the same `core.py`
 
 ## Method
-- Engine numbers (I, F, S, B, H, runway) follow the judges' definitions exactly.
+- Runway numbers follow the judges' definitions exactly (checked against the README examples).
 - Evidence: features from each account's past; outcome = balance below zero in the next 12 months
   (3,660 accounts with 24+ months). Replicated on loan default using pre-loan data only (682 loans).
-- Risk model: logistic regression on buffer (months of spending), no-other-bank-transfer account, past negative balance.
-  AUC 0.92 on held-out accounts. Correlation, not causation.
-- Not used: standing_orders and cards (end-of-data snapshot / issued after loans → leakage).
+- Risk model: logistic regression on savings (months of spending), no transfers with other banks, past negative
+  balance. Held-out AUC 0.91 (bootstrap 95% CI 0.84–0.96).
+- Plans are ranked by the gap in predicted risk between the customer and customers already in the "after" state,
+  and only when that gap's 95% CI (delta method) stays above zero. An association, not a measured causal effect.
+- Not used: standing_orders and cards (end-of-data snapshot / mostly issued after loans → leakage).
 
 ## Data and tools
 - PKDD'99 Discovery Challenge Financial dataset (CTU Prague): https://relational.fel.cvut.cz/dataset/Financial
-- Built with Python, pandas, statsmodels, scikit-learn, Streamlit, Plotly. AI assistance (Claude) was used for coding and analysis.
-
-
-## Web version (site/)
-A second front end built with our teammate's design (light and dark mode). Same numbers: runway from
-`site/engine.py` (the judging formulas), plans, risk, findings from `core.py`, twist reader and messages from `agent.py`.
-
-1. Put the raw CSVs `monthly_summary.csv`, `loans.csv`, `dispositions.csv`, `clients.csv` in `data/` (or `site/data/`).
-2. Run:
-```bash
-python site/web_app.py      # → http://127.0.0.1:8600
-```
-The Gemini key is read from `.streamlit/secrets.toml`, the same file the Streamlit app uses.
+- Built with Python, pandas, statsmodels, scikit-learn, SciPy, Gemini API; Streamlit and Plotly for the backup app.
+  AI assistance (Claude) was used for coding and analysis.

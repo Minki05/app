@@ -83,7 +83,7 @@
     plans: new Map(), peerMode: "income", msgKey: null, openTok: 0,
   };
   const planFor = (id) => {
-    if (!S.plans.has(id)) S.plans.set(id, { target: 6, checked: false, cut: 0, extra: 0, kmon: 3, save: 0 });
+    if (!S.plans.has(id)) S.plans.set(id, { target: 6, checked: false, cut: 0, extra: 0, kmon: 3, save: 0, planBuffer: 0 });
     return S.plans.get(id);
   };
 
@@ -432,6 +432,7 @@
     $("#twist-go").addEventListener("click", readTwist);
     $("#twist-text").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); readTwist(); } });
     $("#msg-go").addEventListener("click", rewriteMessage);
+    $("#plans").addEventListener("click", (e) => { const b = e.target.closest("[data-apply]"); if (b) applyPlan(b.dataset.apply); });
     $$(".theme-btn").forEach((b) => b.addEventListener("click", toggleTheme));
     $("#r-bills").addEventListener("input", (e) => { S.shock.bills = Number(e.target.value); onShock(); });
     $("#r-oneoff").addEventListener("input", (e) => { S.shock.oneOff = Number(e.target.value); onShock(); });
@@ -480,7 +481,8 @@
     const pl = planFor(S.acct), sh = S.shock;
     return { account_id: S.acct, keep: sh.keep, bills_pct: sh.bills, one_off: sh.oneOff, extra_out: sh.extraOut,
       windfall: sh.windfall, start_in: sh.startIn, lasts: sh.lasts, after_pct: sh.afterPct, question: S.question,
-      label: S.label, target: pl.target, checked: pl.checked, cut: pl.cut, extra: pl.extra, kmon: pl.kmon, save: pl.save };
+      label: S.label, target: pl.target, checked: pl.checked, cut: pl.cut, extra: pl.extra, kmon: pl.kmon, save: pl.save,
+      plan_buffer: pl.planBuffer || 0 };
   }
 
   // ---------------------------------------------------------------- twist card (Gemini, rule-based backup)
@@ -577,8 +579,8 @@
     } else tm.hidden = true;
     swapText($("#cmp-today"), b.headline);
     swapText($("#cmp-shock"), a.headline);
-    swapText($("#cmp-plan"), s.confirmed > 0 ? pl.headline : "No changes yet");
-    $("#cmp-plan").classList.toggle("empty", !(s.confirmed > 0));
+    swapText($("#cmp-plan"), s.plan_active ? pl.headline : "No changes yet");
+    $("#cmp-plan").classList.toggle("empty", !s.plan_active);
 
     renderGap(); renderGuide(); renderTable(); renderBackup(); renderTrajectory(); renderPlans(); renderRisk(); renderMessage();
   }
@@ -710,7 +712,7 @@
 
   function renderTrajectory(animate = true) {
     const box = $("#traj"), sim = S.sim, s = sim.projection, n = s.months.length - 1;
-    const showPlan = sim.confirmed > 0;
+    const showPlan = !!sim.plan_active;
     $("#lg-timed").hidden = !s.timed;
     $(".lg-plan").parentElement.style.opacity = showPlan ? 1 : .4;
     if (!box.clientWidth) { T.dirty = true; return; }   // dashboard hidden: draw at the real size when it shows
@@ -873,6 +875,39 @@
   const boldNums = (t) => esc(t).replace(/(\$[\d,]+(?:\/month)?|\d+(?:\.\d+)?%|about \d+ months)/g, "<b>$1</b>");
   const evidence = (t) => esc(t).replace(/(\d+\.\d%) \((\d+\/\d+), 95% CI ([^)]+)\)/g,
     '<span class="stat">$1</span> <span class="ci">($2 · CI $3)</span>');
+  // a plan with a money effect can be put on the chart; the others change risk only, and say so
+  const isApplied = (pl) => {
+    const p = planFor(S.acct), a = pl.apply;
+    if (!a) return false;
+    if (a.cut != null) return p.checked && p.cut === Math.ceil(a.cut) && !p.planBuffer;
+    return (p.planBuffer || 0) === Math.ceil(a.buffer_add);
+  };
+  function applyRow(pl, key) {
+    if (!pl.apply) {
+      return pl.kind === "safety" || pl.new == null ? ""
+        : `<p class="apply-note">Changes risk, not the month-to-month cash flow, so the runway chart stays the same.</p>`;
+    }
+    const on = isApplied(pl), s = S.sim;
+    const result = on ? `<span class="apply-result">${esc(s.after.headline)} → <b>${esc(s.planned.headline)}</b> with ${esc(pl.apply.label)}</span>` : "";
+    return `<div class="apply-row"><button type="button" class="apply-btn${on ? " on" : ""}" data-apply="${esc(key)}">
+      ${on ? "✓ On the chart" : "Show this plan on the chart"}</button>${result}</div>`;
+  }
+  function applyPlan(key) {
+    const pl = (S.sim.plans || []).find((x) => x.title.replace(/[\d$,.%]+/g, "#") === key);
+    if (!pl || !pl.apply) return;
+    const p = planFor(S.acct), on = isApplied(pl);
+    p.checked = false; p.cut = 0; p.planBuffer = 0;           // one plan at a time
+    if (!on) {
+      if (pl.apply.cut != null) { p.checked = true; p.cut = Math.ceil(pl.apply.cut); }     // round up: never just short
+      else p.planBuffer = Math.ceil(pl.apply.buffer_add);
+    }
+    syncControls(); simulate();
+    if (!on) {                                // the chart lives on step 1: go there and watch the plan line draw
+      goStep(1);
+      setTimeout(() => $("#traj").scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" }), reduced ? 50 : 850);
+    }
+  }
+
   // One plan per row: rank · what to do and why · the evidence. Every number is an API value, only formatted here.
   // Rows keep the engine's order (safety nets pinned first, then ranked plans). The priority level is a display label
   // read from the engine's own category: safety net → Urgent, data rank #1 → High, other ranks or "needs support" → Medium,
@@ -915,8 +950,10 @@
           <p class="plan-do">${boldNums(pl.do)}</p>
           <dl class="plan-why">
             <div><dt>Why for this customer</dt><dd>${esc(pl.you)}</dd></div>
+            ${pl.track ? `<div><dt>Their own history</dt><dd class="track ${/realistic/.test(pl.track) ? "ok" : /never/.test(pl.track) ? "no" : "mid"}">${esc(pl.track)}</dd></div>` : ""}
             <div><dt>What Tangerine can do</dt><dd>${esc(pl.bank)}</dd></div>
           </dl>
+          ${applyRow(pl, key)}
         </div>
         <div class="plan-ev">${ev}</div></li>`;
     }).join("") : `<li class="plan-empty">This customer can absorb this shock without changes.</li>`;
