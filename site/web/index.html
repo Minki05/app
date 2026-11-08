@@ -18,6 +18,7 @@
   <section id="landing" class="landing" aria-label="Choose an account">
     <div class="landing-top" data-enter>
       <p class="idx"><span>№ 00 // <b>Cash resilience engine</b></span></p>
+      <img class="brand-logo" src="tangerine-logo.png" width="924" height="192" alt="Tangerine">
       <button class="icon-btn theme-btn" type="button" aria-label="Switch light or dark mode"><svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg><svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
     </div>
 
@@ -42,244 +43,361 @@
     <footer class="landing-foot">Data: PKDD'99 Financial dataset (anonymized), CTU Prague Relational Dataset Repository, as prepared for the Sheridan Datathon. Not an official Tangerine product.</footer>
   </section>
 
-  <!-- ===================================================== command center -->
+  <!-- ===================================================== command center: 4 dashboards, one shown at a time -->
   <main id="main" class="center" hidden>
-    <header class="appbar">
-      <button class="icon-btn" id="back" type="button" aria-label="Back to accounts">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6"/></svg>
-      </button>
-      <span class="wordmark">Resilience Rewired</span>
-      <div class="switcher" role="combobox" aria-expanded="false" aria-owns="switch-list" aria-haspopup="listbox">
-        <svg class="switcher-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
-        <input id="switch-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false"
-               aria-label="Switch account" aria-autocomplete="list" aria-controls="switch-list" placeholder="Account ID">
-        <ul id="switch-list" class="spot-list spot-list-sm" role="listbox" hidden></ul>
+    <header class="appbar" id="appbar">
+      <div class="appbar-row">
+        <button class="icon-btn" id="back" type="button" aria-label="Back to accounts">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6"/></svg>
+        </button>
+        <span class="wordmark">Resilience Rewired</span>
+        <div class="switcher" role="combobox" aria-expanded="false" aria-owns="switch-list" aria-haspopup="listbox">
+          <svg class="switcher-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+          <input id="switch-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false"
+                 aria-label="Switch account" aria-autocomplete="list" aria-controls="switch-list" placeholder="Account ID">
+          <ul id="switch-list" class="spot-list spot-list-sm" role="listbox" hidden></ul>
+        </div>
+        <div class="meta-pills" id="meta-pills"></div>
+        <button class="icon-btn theme-btn" type="button" aria-label="Switch light or dark mode"><svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg><svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
       </div>
-      <div class="meta-pills" id="meta-pills"></div>
-      <button class="icon-btn theme-btn" type="button" aria-label="Switch light or dark mode"><svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg><svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
+
+      <nav class="stepbar" aria-label="Dashboards">
+        <button class="icon-btn step-arrow" id="step-prev" type="button" aria-label="Previous dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6"/></svg>
+        </button>
+        <ol class="steps" id="steps">
+          <li><button type="button" class="step" data-step="1" aria-current="step"><span class="step-node" aria-hidden="true">1</span><span class="step-text"><span class="step-k">Step 1</span><span class="step-name"><span class="step-long">Overview &amp; simulation</span><span class="step-short">Overview</span></span></span></button><span class="step-link" aria-hidden="true"><i></i></span></li>
+          <li><button type="button" class="step" data-step="2"><span class="step-node" aria-hidden="true">2</span><span class="step-text"><span class="step-k">Step 2</span><span class="step-name"><span class="step-long">Action plan</span><span class="step-short">Action plan</span></span></span></button><span class="step-link" aria-hidden="true"><i></i></span></li>
+          <li><button type="button" class="step" data-step="3"><span class="step-node" aria-hidden="true">3</span><span class="step-text"><span class="step-k">Step 3</span><span class="step-name"><span class="step-long">Risk &amp; delivery</span><span class="step-short">Risk</span></span></span></button><span class="step-link" aria-hidden="true"><i></i></span></li>
+          <li><button type="button" class="step" data-step="4"><span class="step-node" aria-hidden="true">4</span><span class="step-text"><span class="step-k">Step 4</span><span class="step-name"><span class="step-long">Evidence &amp; insights</span><span class="step-short">Evidence</span></span></span></button></li>
+        </ol>
+        <button class="icon-btn step-arrow" id="step-next" type="button" aria-label="Next dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg>
+        </button>
+      </nav>
     </header>
 
-    <div class="bento">
-      <!-- № 01 hero runway -->
-      <section class="tile tile-hero" aria-labelledby="runway-label">
-        <p class="idx"><span>№ 01 // <b>Customer profile</b></span></p>
-        <div class="hero-grid">
+    <div class="stage" id="stage">
+      <!-- ================================================= step 1 · overview & simulation -->
+      <section class="dash" id="dash-1" data-step="1" aria-labelledby="dash-1-title">
+        <header class="dash-head">
           <div>
-            <h2 id="runway-label" class="hero-label">How long the cushion lasts · with this shock</h2>
-            <div class="runway" aria-live="polite"><span class="runway-num" id="runway-num">—</span></div>
-            <p class="runway-sub" id="runway-sub"></p>
-            <div class="verdict" id="verdict"></div>
-            <p class="runway-timed" id="runway-timed" hidden></p>
+            <p class="dash-kicker">Step 1 of 4</p>
+            <h1 class="dash-title" id="dash-1-title" tabindex="-1">Overview &amp; simulation</h1>
           </div>
-          <dl class="hero-compare">
-            <div><dt>Today</dt><dd id="cmp-today">—</dd></div>
-            <div class="is-shock"><dt>With this shock</dt><dd id="cmp-shock">—</dd></div>
-            <div class="is-plan"><dt>With your plan</dt><dd id="cmp-plan">—</dd></div>
-          </dl>
+          <p class="dash-lede">Who the customer is, the shock you apply, the plan they confirm, and where the cash goes as a result.</p>
+        </header>
+
+        <div class="bento bento-1">
+          <!-- № 01 hero runway -->
+          <section class="tile tile-hero" aria-labelledby="runway-label">
+            <p class="idx"><span>№ 01 // <b>Customer profile</b></span></p>
+            <div class="hero-grid">
+              <div>
+                <h2 id="runway-label" class="hero-label">How long the cushion lasts · with this shock</h2>
+                <div class="runway" aria-live="polite"><span class="runway-num" id="runway-num">—</span></div>
+                <p class="runway-sub" id="runway-sub"></p>
+                <div class="verdict" id="verdict"></div>
+                <p class="runway-timed" id="runway-timed" hidden></p>
+              </div>
+              <dl class="hero-compare">
+                <div><dt>Today</dt><dd id="cmp-today">—</dd></div>
+                <div class="is-shock"><dt>With this shock</dt><dd id="cmp-shock">—</dd></div>
+                <div class="is-plan"><dt>With your plan</dt><dd id="cmp-plan">—</dd></div>
+              </dl>
+            </div>
+            <dl class="hero-figs" id="hero-figs"></dl>
+          </section>
+
+          <!-- № 02 shock -->
+          <section class="tile tile-shock" aria-labelledby="shock-title">
+            <p class="idx"><span>№ 02 // <b>Shock simulator</b></span></p>
+            <h2 id="shock-title" class="tile-title">Apply a shock</h2>
+            <div class="twist">
+              <label for="twist-text" class="twist-label"><span>Twist card</span><span class="twist-ai">AI reader · Gemini</span></label>
+              <textarea id="twist-text" rows="3" spellcheck="false"
+                placeholder="Paste the judge's card in any wording, e.g. They lose their job (EI at 55%) and household bills go up 15%."></textarea>
+              <button type="button" class="btn-primary" id="twist-go"><span>Read twist card</span></button>
+              <p class="twist-note" id="twist-note" hidden></p>
+            </div>
+            <div class="pills" role="radiogroup" aria-label="Scenario" id="presets">
+              <button type="button" role="radio" data-preset="ei55">Job loss · EI 55%</button>
+              <button type="button" role="radio" data-preset="furnace">Furnace · 1 month of spending</button>
+              <button type="button" role="radio" data-preset="combined">Job loss + bills +15%</button>
+              <button type="button" role="radio" data-preset="none">No shock</button>
+            </div>
+            <div class="control">
+              <div class="control-row"><label for="r-keep">Money in that continues</label><output id="o-keep" for="r-keep"></output></div>
+              <input type="range" id="r-keep" min="0" max="100" step="0.5">
+              <p class="control-note" id="n-keep"></p>
+            </div>
+            <div class="control">
+              <div class="control-row"><label for="r-bills">Household bills</label><output id="o-bills" for="r-bills"></output></div>
+              <input type="range" id="r-bills" min="0" max="100" step="0.5">
+              <p class="control-note" id="n-bills"></p>
+            </div>
+            <div class="control">
+              <div class="control-row"><label for="r-oneoff">One-time expense</label><output id="o-oneoff" for="r-oneoff"></output></div>
+              <input type="range" id="r-oneoff" min="0" max="20000" step="50">
+              <p class="control-note">Paid once from the cushion.</p>
+            </div>
+            <details class="more" id="more-shock">
+              <summary>More shock types &amp; timing</summary>
+              <div class="money-fields">
+                <label class="money-field"><span>New monthly costs</span>
+                  <span class="money-input"><span aria-hidden="true">$</span><input type="number" step="50" id="i-xout" inputmode="numeric" placeholder="0"></span></label>
+                <label class="money-field"><span>One-off money in</span>
+                  <span class="money-input"><span aria-hidden="true">$</span><input type="number" min="0" step="500" id="i-wind" inputmode="numeric" placeholder="0"></span></label>
+              </div>
+              <div class="control">
+                <div class="control-row"><label for="r-start">Shock starts in</label><output id="o-start" for="r-start"></output></div>
+                <input type="range" id="r-start" min="0" max="12" step="1">
+              </div>
+              <div class="control">
+                <div class="control-row"><label for="r-lasts">Shock lasts</label><output id="o-lasts" for="r-lasts"></output></div>
+                <input type="range" id="r-lasts" min="0" max="24" step="1">
+              </div>
+              <div class="control" id="c-after">
+                <div class="control-row"><label for="r-after">Money in after it ends</label><output id="o-after" for="r-after"></output></div>
+                <input type="range" id="r-after" min="0" max="150" step="1">
+              </div>
+              <p class="fineprint">Timing feeds the month-by-month line. The judges' runway assumes the shock never ends.</p>
+            </details>
+            <p class="fineprint" id="ei-note" hidden>Competition assumption: 55% of usual money in continues. Not a model of real EI rules.</p>
+          </section>
+
+          <!-- № 03 plan -->
+          <section class="tile tile-plan" aria-labelledby="plan-title">
+            <p class="idx"><span>№ 03 // <b>Resilience plan</b></span></p>
+            <h2 id="plan-title" class="tile-title">Make a plan</h2>
+            <div class="control">
+              <div class="control-row"><span id="target-label">Last at least</span></div>
+              <div class="seg" role="radiogroup" aria-labelledby="target-label" id="targets">
+                <button type="button" role="radio" data-target="3">3 mo</button>
+                <button type="button" role="radio" data-target="6">6 mo</button>
+                <button type="button" role="radio" data-target="9">9 mo</button>
+                <button type="button" role="radio" data-target="12">12 mo</button>
+              </div>
+            </div>
+            <div class="control control-switch">
+              <span id="sw-label">Confirmed what I can cut</span>
+              <button type="button" class="switch" role="switch" aria-checked="false" aria-labelledby="sw-label" id="sw-checked"><span></span></button>
+            </div>
+            <div class="money-fields">
+              <label class="money-field" id="f-cut">
+                <span>Monthly cut</span>
+                <span class="money-input"><span aria-hidden="true">$</span><input type="number" min="0" step="50" id="i-cut" inputmode="numeric"></span>
+              </label>
+              <label class="money-field">
+                <span>Extra money in</span>
+                <span class="money-input"><span aria-hidden="true">$</span><input type="number" min="0" step="50" id="i-extra" inputmode="numeric"></span>
+              </label>
+            </div>
+            <p class="fineprint">Your own estimates, not from the records. Extra money in isn't guaranteed.</p>
+            <div class="gapbar" id="gapbar">
+              <div class="gapbar-track"><span class="gapbar-conf" id="gb-conf"></span><span class="gapbar-open" id="gb-open"></span></div>
+              <dl class="gapbar-legend">
+                <div><dt>Needed</dt><dd id="gb-need">—</dd></div>
+                <div><dt>You confirmed</dt><dd id="gb-c">—</dd></div>
+                <div><dt>Still needed</dt><dd id="gb-r">—</dd></div>
+              </dl>
+              <p class="control-note" id="gb-note"></p>
+            </div>
+          </section>
+
+          <!-- № 05 trajectory -->
+          <section class="tile tile-chart" aria-labelledby="traj-title">
+            <p class="idx"><span>№ 05 // <b>Cash trajectory</b></span></p>
+            <div class="tile-head">
+              <h2 id="traj-title" class="tile-title">Where the cash goes</h2>
+              <ul class="legend" aria-hidden="true">
+                <li><i class="lg lg-today"></i>Today</li>
+                <li><i class="lg lg-shock"></i>With this shock</li>
+                <li><i class="lg lg-plan"></i>With your plan</li>
+                <li id="lg-timed" hidden><i class="lg lg-timed"></i>Month by month</li>
+              </ul>
+            </div>
+            <div class="chart" id="traj"></div>
+            <table class="figtable" id="figtable" aria-label="Before and after figures"></table>
+          </section>
         </div>
-        <dl class="hero-figs" id="hero-figs"></dl>
+
+        <footer class="dash-foot">
+          <p class="dash-next">Next · Step 2 · Action plan</p>
+          <button type="button" class="cta" data-go="2"><span>What to do next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M13.5 6.5 19 12l-5.5 5.5"/></svg></button>
+        </footer>
       </section>
 
-      <!-- № 02 shock -->
-      <section class="tile tile-shock" aria-labelledby="shock-title">
-        <p class="idx"><span>№ 02 // <b>Shock simulator</b></span></p>
-        <h2 id="shock-title" class="tile-title">Apply a shock</h2>
-        <div class="twist">
-          <label for="twist-text" class="twist-label"><span>Twist card</span><span class="twist-ai">AI reader · Gemini</span></label>
-          <textarea id="twist-text" rows="3" spellcheck="false"
-            placeholder="Paste the judge's card in any wording, e.g. They lose their job (EI at 55%) and household bills go up 15%."></textarea>
-          <button type="button" class="btn-primary" id="twist-go"><span>Read twist card</span></button>
-          <p class="twist-note" id="twist-note" hidden></p>
-        </div>
-        <div class="pills" role="radiogroup" aria-label="Scenario" id="presets">
-          <button type="button" role="radio" data-preset="ei55">Job loss · EI 55%</button>
-          <button type="button" role="radio" data-preset="furnace">Furnace · 1 month of spending</button>
-          <button type="button" role="radio" data-preset="combined">Job loss + bills +15%</button>
-          <button type="button" role="radio" data-preset="none">No shock</button>
-        </div>
-        <div class="control">
-          <div class="control-row"><label for="r-keep">Money in that continues</label><output id="o-keep" for="r-keep"></output></div>
-          <input type="range" id="r-keep" min="0" max="100" step="0.5">
-          <p class="control-note" id="n-keep"></p>
-        </div>
-        <div class="control">
-          <div class="control-row"><label for="r-bills">Household bills</label><output id="o-bills" for="r-bills"></output></div>
-          <input type="range" id="r-bills" min="0" max="100" step="0.5">
-          <p class="control-note" id="n-bills"></p>
-        </div>
-        <div class="control">
-          <div class="control-row"><label for="r-oneoff">One-time expense</label><output id="o-oneoff" for="r-oneoff"></output></div>
-          <input type="range" id="r-oneoff" min="0" max="20000" step="50">
-          <p class="control-note">Paid once from the cushion.</p>
-        </div>
-        <details class="more" id="more-shock">
-          <summary>More shock types &amp; timing</summary>
-          <div class="money-fields">
-            <label class="money-field"><span>New monthly costs</span>
-              <span class="money-input"><span aria-hidden="true">$</span><input type="number" step="50" id="i-xout" inputmode="numeric" placeholder="0"></span></label>
-            <label class="money-field"><span>One-off money in</span>
-              <span class="money-input"><span aria-hidden="true">$</span><input type="number" min="0" step="500" id="i-wind" inputmode="numeric" placeholder="0"></span></label>
+      <!-- ================================================= step 2 · action plan -->
+      <section class="dash" id="dash-2" data-step="2" aria-labelledby="dash-2-title" hidden>
+        <header class="dash-head">
+          <div>
+            <p class="dash-kicker">Step 2 of 4</p>
+            <h1 class="dash-title" id="dash-2-title" tabindex="-1">Action plan</h1>
           </div>
-          <div class="control">
-            <div class="control-row"><label for="r-start">Shock starts in</label><output id="o-start" for="r-start"></output></div>
-            <input type="range" id="r-start" min="0" max="12" step="1">
+          <p class="dash-lede">What to do now, the fallback if the shock hits, and why each plan is recommended.</p>
+        </header>
+
+        <div class="bento bento-2">
+          <!-- № 04 guide -->
+          <section class="tile tile-guide tile-feature" aria-labelledby="guide-title">
+            <p class="idx"><span>№ 04 // <b>Planning guide</b></span></p>
+            <h2 id="guide-title" class="tile-title">What to do next</h2>
+            <p class="guide-state" id="guide-state">—</p>
+            <p class="guide-why" id="guide-why"></p>
+            <ol class="guide-steps" id="guide-steps"></ol>
+            <div class="guide-result" id="guide-result"></div>
+            <p class="fineprint">For this scenario, before your plan. Not a credit score or a permanent customer group.</p>
+          </section>
+
+          <!-- link out: Tangerine's borrowing page (opens in a new tab) -->
+          <a class="tile tile-borrow" href="https://www.tangerine.ca/en/personal/borrow" target="_blank" rel="noopener noreferrer">
+            <span class="borrow-kicker">Tangerine · Borrow</span>
+            <span class="borrow-title">Explore borrowing options at Tangerine</span>
+            <span class="borrow-foot"><span>Opens tangerine.ca in a new tab</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8.5 7H17v8.5"/></svg></span>
+          </a>
+
+          <!-- № 06 backup -->
+          <section class="tile tile-backup" aria-labelledby="backup-title">
+            <p class="idx"><span>№ 06 // <b>Backup plan</b></span></p>
+            <h2 id="backup-title" class="tile-title">If the shock hits</h2>
+            <ol class="backup" id="backup"></ol>
+            <div class="fund" id="fund"></div>
+          </section>
+
+          <!-- № 07 ranked plans (core.py) -->
+          <section class="tile tile-ranked" aria-labelledby="ranked-title">
+            <p class="idx"><span>№ 07 // <b>Data-driven plans</b></span></p>
+            <div class="tile-head">
+              <h2 id="ranked-title" class="tile-title">Why each plan, ranked</h2>
+              <span class="count-pill" id="ranked-count"></span>
+            </div>
+            <p class="fineprint plans-note">Ranked by the gap in predicted risk between this customer and customers who already look like the "after" state. A plan is ranked only if the gap's 95% confidence interval stays above zero. An association in the data, not a measured effect of the action.</p>
+            <div class="plans-head" aria-hidden="true"><span>Priority</span><span>What to do &amp; why</span><span>Evidence</span></div>
+            <ol class="plans" id="plans"></ol>
+          </section>
+        </div>
+
+        <footer class="dash-foot">
+          <p class="dash-next">Next · Step 3 · Risk &amp; delivery</p>
+          <button type="button" class="cta" data-go="3"><span>Review risk &amp; message</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M13.5 6.5 19 12l-5.5 5.5"/></svg></button>
+        </footer>
+      </section>
+
+      <!-- ================================================= step 3 · risk & delivery -->
+      <section class="dash" id="dash-3" data-step="3" aria-labelledby="dash-3-title" hidden>
+        <header class="dash-head">
+          <div>
+            <p class="dash-kicker">Step 3 of 4</p>
+            <h1 class="dash-title" id="dash-3-title" tabindex="-1">Risk &amp; delivery</h1>
           </div>
-          <div class="control">
-            <div class="control-row"><label for="r-lasts">Shock lasts</label><output id="o-lasts" for="r-lasts"></output></div>
-            <input type="range" id="r-lasts" min="0" max="24" step="1">
+          <p class="dash-lede">How likely this account is to go below $0 within a year, and the message to send the customer.</p>
+        </header>
+
+        <div class="bento bento-3">
+          <!-- № 08 risk + message: risk panel -->
+          <section class="tile tile-risk tile-dark" aria-labelledby="risk-title">
+            <p class="idx"><span>№ 08 // <b>Risk &amp; message</b> · Risk</span></p>
+            <h2 id="risk-title" class="tile-title">Chance of going below $0 within a year</h2>
+            <div class="gauge" id="gauge">
+              <svg viewBox="0 0 200 116" aria-hidden="true"><path class="g-track" d="M16 104 A84 84 0 0 1 184 104"/><path class="g-fill" id="g-fill" d="M16 104 A84 84 0 0 1 184 104"/></svg>
+              <div class="gauge-num" id="g-num">—</div>
+            </div>
+            <p class="fineprint" id="g-note"></p>
+          </section>
+
+          <!-- № 08 risk + message: message panel -->
+          <section class="tile tile-msg" aria-labelledby="msg-title">
+            <p class="idx"><span>№ 08 // <b>Risk &amp; message</b> · Message</span></p>
+            <div class="tile-head">
+              <h2 id="msg-title" class="tile-title">Message to the customer</h2>
+              <span class="msg-src" id="msg-src">Template</span>
+            </div>
+            <div class="msg">
+              <p class="msg-body" id="msg-body"></p>
+              <div class="msg-actions">
+                <button type="button" class="btn-ghost" id="msg-go"><span>✨ Rewrite with Gemini</span></button>
+                <p class="fineprint">Numbers come from the engine, not the AI.</p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <footer class="dash-foot">
+          <p class="dash-next">Next · Step 4 · Evidence &amp; insights</p>
+          <button type="button" class="cta" data-go="4"><span>Explore the evidence</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M13.5 6.5 19 12l-5.5 5.5"/></svg></button>
+        </footer>
+      </section>
+
+      <!-- ================================================= step 4 · evidence & insights -->
+      <section class="dash" id="dash-4" data-step="4" aria-labelledby="dash-4-title" hidden>
+        <header class="dash-head">
+          <div>
+            <p class="dash-kicker">Step 4 of 4</p>
+            <h1 class="dash-title" id="dash-4-title" tabindex="-1">Evidence &amp; insights</h1>
           </div>
-          <div class="control" id="c-after">
-            <div class="control-row"><label for="r-after">Money in after it ends</label><output id="o-after" for="r-after"></output></div>
-            <input type="range" id="r-after" min="0" max="150" step="1">
-          </div>
-          <p class="fineprint">Timing feeds the month-by-month line. The judges' runway assumes the shock never ends.</p>
-        </details>
-        <p class="fineprint" id="ei-note" hidden>Competition assumption: 55% of usual money in continues. Not a model of real EI rules.</p>
-      </section>
+          <p class="dash-lede">What the data shows across all accounts, this account's monthly spending, and how it compares with similar accounts.</p>
+        </header>
 
-      <!-- № 03 plan -->
-      <section class="tile tile-plan" aria-labelledby="plan-title">
-        <p class="idx"><span>№ 03 // <b>Resilience plan</b></span></p>
-        <h2 id="plan-title" class="tile-title">Make a plan</h2>
-        <div class="control">
-          <div class="control-row"><span id="target-label">Last at least</span></div>
-          <div class="seg" role="radiogroup" aria-labelledby="target-label" id="targets">
-            <button type="button" role="radio" data-target="3">3 mo</button>
-            <button type="button" role="radio" data-target="6">6 mo</button>
-            <button type="button" role="radio" data-target="9">9 mo</button>
-            <button type="button" role="radio" data-target="12">12 mo</button>
-          </div>
-        </div>
-        <div class="control control-switch">
-          <span id="sw-label">Confirmed what I can cut</span>
-          <button type="button" class="switch" role="switch" aria-checked="false" aria-labelledby="sw-label" id="sw-checked"><span></span></button>
-        </div>
-        <div class="money-fields">
-          <label class="money-field" id="f-cut">
-            <span>Monthly cut</span>
-            <span class="money-input"><span aria-hidden="true">$</span><input type="number" min="0" step="50" id="i-cut" inputmode="numeric"></span>
-          </label>
-          <label class="money-field">
-            <span>Extra money in</span>
-            <span class="money-input"><span aria-hidden="true">$</span><input type="number" min="0" step="50" id="i-extra" inputmode="numeric"></span>
-          </label>
-        </div>
-        <p class="fineprint">Your own estimates, not from the records. Extra money in isn't guaranteed.</p>
-        <div class="gapbar" id="gapbar">
-          <div class="gapbar-track"><span class="gapbar-conf" id="gb-conf"></span><span class="gapbar-open" id="gb-open"></span></div>
-          <dl class="gapbar-legend">
-            <div><dt>Needed</dt><dd id="gb-need">—</dd></div>
-            <div><dt>You confirmed</dt><dd id="gb-c">—</dd></div>
-            <div><dt>Still needed</dt><dd id="gb-r">—</dd></div>
-          </dl>
-          <p class="control-note" id="gb-note"></p>
-        </div>
-      </section>
+        <div class="bento bento-4">
+          <!-- № 09 findings -->
+          <section class="tile tile-findings" aria-labelledby="find-title">
+            <p class="idx"><span>№ 09 // <b>Discovery</b></span></p>
+            <div class="tile-head">
+              <h2 id="find-title" class="tile-title">What the data shows</h2>
+              <span class="count-pill">6 findings</span>
+            </div>
+            <p class="fineprint" id="find-scope" style="margin-top:8px"></p>
+            <div class="fgrid" id="fgrid"></div>
+          </section>
 
-      <!-- № 04 guide -->
-      <section class="tile tile-guide" aria-labelledby="guide-title">
-        <p class="idx"><span>№ 04 // <b>Planning guide</b></span></p>
-        <h2 id="guide-title" class="tile-title">What to do next</h2>
-        <p class="guide-state" id="guide-state">—</p>
-        <p class="guide-why" id="guide-why"></p>
-        <ol class="guide-steps" id="guide-steps"></ol>
-        <div class="guide-result" id="guide-result"></div>
-        <p class="fineprint">For this scenario, before your plan. Not a credit score or a permanent customer group.</p>
-      </section>
+          <!-- № 10 monthly spending -->
+          <section class="tile tile-spend" aria-labelledby="spend-title">
+            <p class="idx"><span>№ 10 // <b>Monthly spending</b></span></p>
+            <div class="tile-head">
+              <h2 id="spend-title" class="tile-title">Money out, last 12 months</h2>
+              <ul class="legend" aria-hidden="true">
+                <li><i class="lg lg-bar"></i>Actual money out</li>
+                <li><i class="lg lg-typical"></i>Typical month <span id="sp-typical"></span></li>
+              </ul>
+            </div>
+            <div class="chart" id="ch-months"></div>
+            <p class="fineprint" id="sp-note"></p>
+          </section>
 
-      <!-- № 05 trajectory -->
-      <section class="tile tile-chart" aria-labelledby="traj-title">
-        <p class="idx"><span>№ 05 // <b>Cash trajectory</b></span></p>
-        <div class="tile-head">
-          <h2 id="traj-title" class="tile-title">Where the cash goes</h2>
-          <ul class="legend" aria-hidden="true">
-            <li><i class="lg lg-today"></i>Today</li>
-            <li><i class="lg lg-shock"></i>With this shock</li>
-            <li><i class="lg lg-plan"></i>With your plan</li>
-            <li id="lg-timed" hidden><i class="lg lg-timed"></i>Month by month</li>
-          </ul>
+          <!-- № 11 peer benchmark -->
+          <section class="tile tile-peers" aria-labelledby="peers-title">
+            <p class="idx"><span>№ 11 // <b>Peer benchmark</b></span></p>
+            <div class="tile-head">
+              <h2 id="peers-title" class="tile-title">Accounts like this one</h2>
+              <div class="seg" role="radiogroup" aria-label="Compare by" id="peer-mode">
+                <button type="button" role="radio" data-mode="income">Money in ±20%</button>
+                <button type="button" role="radio" data-mode="age">Owner age ±5</button>
+                <button type="button" role="radio" data-mode="both">Both</button>
+              </div>
+            </div>
+            <div id="peers-body"></div>
+          </section>
         </div>
-        <div class="chart" id="traj"></div>
-        <table class="figtable" id="figtable" aria-label="Before and after figures"></table>
-      </section>
 
-      <!-- № 06 backup -->
-      <section class="tile tile-backup" aria-labelledby="backup-title">
-        <p class="idx"><span>№ 06 // <b>Backup plan</b></span></p>
-        <h2 id="backup-title" class="tile-title">If the shock hits</h2>
-        <ol class="backup" id="backup"></ol>
-        <div class="fund" id="fund"></div>
-      </section>
-
-      <!-- № 07 ranked plans (core.py) -->
-      <section class="tile tile-ranked" aria-labelledby="ranked-title">
-        <p class="idx"><span>№ 07 // <b>Data-driven plans</b></span></p>
-        <div class="tile-head">
-          <h2 id="ranked-title" class="tile-title">Why each plan, ranked</h2>
-          <span class="count-pill" id="ranked-count"></span>
-        </div>
-        <p class="fineprint" style="margin-top:8px">Ranked by the gap in predicted risk between this customer and customers who already look like the "after" state. A plan is ranked only if the gap's 95% confidence interval stays above zero. An association in the data, not a measured effect of the action.</p>
-        <div class="plans" id="plans"></div>
-      </section>
-
-      <!-- № 08 risk + message -->
-      <section class="tile tile-risk tile-dark" aria-labelledby="risk-title">
-        <p class="idx"><span>№ 08 // <b>Risk &amp; message</b></span></p>
-        <h2 id="risk-title" class="tile-title">Chance of going below $0 within a year</h2>
-        <div class="gauge" id="gauge">
-          <svg viewBox="0 0 200 116" aria-hidden="true"><path class="g-track" d="M16 104 A84 84 0 0 1 184 104"/><path class="g-fill" id="g-fill" d="M16 104 A84 84 0 0 1 184 104"/></svg>
-          <div class="gauge-num" id="g-num">—</div>
-        </div>
-        <p class="fineprint" id="g-note"></p>
-        <div class="msg">
-          <div class="msg-head"><span>Message to the customer</span><span class="msg-src" id="msg-src">Template</span></div>
-          <p class="msg-body" id="msg-body"></p>
-          <button type="button" class="btn-ghost" id="msg-go"><span>✨ Rewrite with Gemini</span></button>
-          <p class="fineprint">Numbers come from the engine, not the AI.</p>
-        </div>
-      </section>
-
-      <!-- № 09 findings -->
-      <section class="tile tile-findings" aria-labelledby="find-title">
-        <p class="idx"><span>№ 09 // <b>Discovery</b></span></p>
-        <div class="tile-head">
-          <h2 id="find-title" class="tile-title">What the data shows</h2>
-          <span class="count-pill">6 findings</span>
-        </div>
-        <p class="fineprint" id="find-scope" style="margin-top:8px"></p>
-        <div class="fgrid" id="fgrid"></div>
-      </section>
-
-      <!-- № 10 monthly spending -->
-      <section class="tile tile-spend" aria-labelledby="spend-title">
-        <p class="idx"><span>№ 10 // <b>Monthly spending</b></span></p>
-        <div class="tile-head">
-          <h2 id="spend-title" class="tile-title">Money out, last 12 months</h2>
-          <ul class="legend" aria-hidden="true">
-            <li><i class="lg lg-bar"></i>Actual money out</li>
-            <li><i class="lg lg-typical"></i>Typical month <span id="sp-typical"></span></li>
-          </ul>
-        </div>
-        <div class="chart" id="ch-months"></div>
-        <p class="fineprint" id="sp-note"></p>
-      </section>
-
-      <!-- № 11 peer benchmark -->
-      <section class="tile tile-peers" aria-labelledby="peers-title">
-        <p class="idx"><span>№ 11 // <b>Peer benchmark</b></span></p>
-        <div class="tile-head">
-          <h2 id="peers-title" class="tile-title">Accounts like this one</h2>
-          <div class="seg" role="radiogroup" aria-label="Compare by" id="peer-mode">
-            <button type="button" role="radio" data-mode="income">Money in ±20%</button>
-            <button type="button" role="radio" data-mode="age">Owner age ±5</button>
-            <button type="button" role="radio" data-mode="both">Both</button>
-          </div>
-        </div>
-        <div id="peers-body"></div>
+        <footer class="dash-foot">
+          <p class="dash-next">Back to Step 1 · Overview &amp; simulation</p>
+          <button type="button" class="cta" data-go="1"><svg class="cta-back" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H5M10.5 6.5 5 12l5.5 5.5"/></svg><span>Back to simulation</span></button>
+        </footer>
       </section>
     </div>
+
     <footer class="app-foot">Runway figures come from engine.py (the judging method); plans, risk and findings from core.py. Historical data to December 2025, not a live balance.</footer>
   </main>
+
+  <!-- dashboard transition: a cash line runs to the next step's node -->
+  <svg class="transit" id="transit" aria-hidden="true" focusable="false">
+    <path class="tr-glow" id="tr-glow"/>
+    <path class="tr-line" id="tr-line"/>
+    <circle class="tr-ring" id="tr-ring" r="12"/>
+    <circle class="tr-node" id="tr-node" r="11"/>
+  </svg>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <script>window.RR_API_BASE = "";   // e.g. "http://localhost:5000" if your API runs elsewhere</script>

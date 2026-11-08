@@ -80,7 +80,7 @@
     overview: null, ids: [], byId: new Map(), accounts: new Map(),
     acct: null, data: null, sim: null,
     preset: "ei55", shock: { keep: 55, bills: 0, oneOff: 0, ...NO_EXTRA }, question: "last_months", label: "job loss (EI 55%)",
-    plans: new Map(), peerMode: "income", msgKey: null,
+    plans: new Map(), peerMode: "income", msgKey: null, openTok: 0,
   };
   const planFor = (id) => {
     if (!S.plans.has(id)) S.plans.set(id, { target: 6, checked: false, cut: 0, extra: 0, kmon: 3, save: 0 });
@@ -136,12 +136,15 @@
   }
 
   // ---------------------------------------------------------------- stage changes
-  async function openAccount(id) {
+  // step: which dashboard to land on (account switches land on 1); push: false when the URL already says so
+  async function openAccount(id, { step = 1, push = true } = {}) {
     if (!S.byId.has(id)) { toast(`We couldn't find account ${id}.`); return; }
+    const tok = ++S.openTok;
     let data = S.accounts.get(id);
     try {
       if (!data) { data = await api(`/api/account/${id}`); S.accounts.set(id, data); }
-    } catch (err) { toast(err.message); return; }
+    } catch (err) { if (tok === S.openTok) toast(err.message); return; }
+    if (tok !== S.openTok) return;        // a newer account pick won while this one loaded
     const first = S.acct == null || $("#main").hidden;
     const changed = S.acct !== id;
     S.acct = id; S.data = data;
@@ -151,11 +154,16 @@
       S.shock = { keep: cfg.keep, bills: cfg.bills, oneOff: cfg.oneOff, ...NO_EXTRA };
       $("#twist-note").hidden = true; $("#more-shock").open = false;
     }
-    if (location.hash !== `#/account/${id}`) history.pushState(null, "", `#/account/${id}`);
+    if (push) { const h = hashFor(id, step); if (location.hash !== h) history.pushState(null, "", h); }
     $("#switch-input").value = "";
     $("#switch-input").placeholder = `#${id}`;
-    if (first) await enterCenter();
+    if (first) {                          // first view: show the asked-for dashboard directly, no transition
+      NAV.tok++; NAV.shown = NAV.want = step; settle(); updateStepper(step);
+      await enterCenter();
+    }
     renderAccount();
+    if (!first) goStep(step, { push: false });
+    updateStepper(NAV.want);              // also refreshes the tab title when the step didn't change
     simulate();
   }
 
@@ -167,18 +175,188 @@
     }
     landing.hidden = true; landing.classList.remove("leaving");
     main.hidden = false;
-    $$(".tile", main).forEach((t, i) => t.style.setProperty("--i", i));
+    measureChrome();
+    $$(".dash:not([hidden]) .tile", main).forEach((t, i) => t.style.setProperty("--i", i));
     main.classList.add("entering");
     window.scrollTo(0, 0);
     setTimeout(() => main.classList.remove("entering"), 1100);
-    document.title = `Account ${S.acct} · Resilience Rewired`;
   }
 
   function showLanding() {
+    NAV.tok++; settle();
     $("#main").hidden = true; $("#landing").hidden = false;
     document.title = "Resilience Rewired: cash resilience for any bank account";
     $("#spot-input").value = "";
     $("#spot-input").focus({ preventScroll: true });
+  }
+
+  // ---------------------------------------------------------------- dashboards: 4 steps, one shown at a time
+  // URL: #/account/{id} is step 1 (old links keep working); #/account/{id}/plan|risk|evidence are steps 2–4.
+  const STEPS = [
+    { slug: "", name: "Overview & simulation" },
+    { slug: "plan", name: "Action plan" },
+    { slug: "risk", name: "Risk & delivery" },
+    { slug: "evidence", name: "Evidence & insights" },
+  ];
+  const stepOf = (slug) => { const i = STEPS.findIndex((s) => s.slug === (slug || "")); return i < 0 ? 1 : i + 1; };
+  const hashFor = (id, step) => `#/account/${id}${step > 1 ? "/" + STEPS[step - 1].slug : ""}`;
+  const motionOff = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const dashEl = (n) => $(`#dash-${n}`);
+  const E_OUT = "cubic-bezier(0.22, 1, 0.36, 1)";
+  // shown: the dashboard in the DOM now · want: where we're headed · tok: bumps on every new move, stale moves bail
+  const NAV = { shown: 1, want: 1, tok: 0, anims: [], timer: 0 };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const done = (a) => a.finished.catch(() => {});
+  const inView = (els) => els.filter((el) => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight && r.width > 0; });
+  const nodeCenter = (n) => {
+    const r = $(`#steps .step[data-step="${n}"] .step-node`).getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  };
+
+  function measureChrome() {
+    const h = $("#appbar").offsetHeight;
+    if (h) document.documentElement.style.setProperty("--chrome-h", h + "px");
+  }
+
+  function updateStepper(step) {
+    $$("#steps .step").forEach((b) => {
+      const n = Number(b.dataset.step);
+      if (n === step) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
+      b.parentElement.classList.toggle("is-before", n < step);
+    });
+    const prev = $("#step-prev"), next = $("#step-next");
+    prev.disabled = step === 1; next.disabled = step === STEPS.length;
+    prev.setAttribute("aria-label", step > 1 ? `Previous dashboard: ${STEPS[step - 2].name}` : "Previous dashboard");
+    next.setAttribute("aria-label", step < STEPS.length ? `Next dashboard: ${STEPS[step].name}` : "Next dashboard");
+    prev.title = prev.getAttribute("aria-label"); next.title = next.getAttribute("aria-label");
+    if (S.acct != null) document.title = `Account ${S.acct} · ${STEPS[step - 1].name} · Resilience Rewired`;
+  }
+
+  // Leave the DOM in a clean resting state: only NAV.shown visible, no running animations, no overlay, no lock.
+  function settle() {
+    clearTimeout(NAV.timer);
+    NAV.anims.forEach((a) => { try { a.cancel(); } catch (err) { /* already gone */ } });
+    NAV.anims = [];
+    $$(".dash").forEach((d) => { d.hidden = Number(d.dataset.step) !== NAV.shown; d.inert = false; });
+    $("#transit").classList.remove("on");
+    document.documentElement.classList.remove("is-transiting");
+  }
+
+  function goStep(step, { push = true, origin = null, focus = true } = {}) {
+    step = Math.min(Math.max(Math.round(step) || 1, 1), STEPS.length);
+    if (step === NAV.want) return;                     // already there, or already on the way
+    if (push && S.acct != null) { const h = hashFor(S.acct, step); if (location.hash !== h) history.pushState(null, "", h); }
+    NAV.want = step; updateStepper(step);
+    transition(step, origin, focus);
+  }
+
+  // charts drawn while their dashboard was hidden (width 0) are redrawn at the real size once it shows
+  function refreshCharts(step) {
+    if (step === 1 && S.sim) { const box = $("#traj"); if (T.dirty || box._w !== box.clientWidth) renderTrajectory(false); }
+    if (step === 4 && S.data) { const box = $("#ch-months"); if (drawMonths.dirty || box._w !== box.clientWidth) drawMonths(); }
+  }
+
+  function swapDash(from, to, focus) {
+    const out = dashEl(from), inn = dashEl(to);
+    out.hidden = true; out.inert = false;
+    inn.hidden = false; NAV.shown = to;
+    window.scrollTo(0, 0);
+    refreshCharts(to);
+    if (focus) $(".dash-title", inn).focus({ preventScroll: true });
+  }
+
+  // 1 cards leave in the travel direction · 2 a cash line runs to the next step's node · 3 the key panel
+  // unfolds from that node · 4 the rest follow. ~750 ms. Any new move cancels this one and starts from a clean state.
+  async function transition(to, origin, focus) {
+    settle();
+    const tok = ++NAV.tok, from = NAV.shown, alive = () => tok === NAV.tok;
+    if (from === to) { refreshCharts(to); if (focus) $(".dash-title", dashEl(to)).focus({ preventScroll: true }); return; }
+    const dir = to > from ? 1 : -1, out = dashEl(from), inn = dashEl(to);
+    const track = (a) => (NAV.anims.push(a), a);
+    document.documentElement.classList.add("is-transiting");
+    NAV.timer = setTimeout(() => { if (alive()) settle(); }, 1500);   // failsafe: never leave a lock behind
+
+    if (motionOff()) {                                  // reduced motion: no travel, no line, a short fade
+      swapDash(from, to, focus);
+      await done(track(inn.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: "linear" })));
+      if (alive()) settle();
+      return;
+    }
+
+    out.inert = true;
+    const outParts = inView([$(".dash-head", out), ...$$(".tile", out), $(".dash-foot", out)]);
+    const outAnims = outParts.map((el, i) => track(el.animate(
+      [{ opacity: 1, transform: "none" }, { opacity: 0, transform: `translate3d(${-dir * 28}px, -4px, 0)` }],
+      { duration: 190, delay: Math.min(i, 6) * 22, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "forwards" })));
+    connector(origin, to, dir, track);
+
+    await sleep(230);
+    if (!alive()) return;
+    swapDash(from, to, focus);
+    outAnims.forEach((a) => a.cancel());               // the old dashboard is hidden now; nothing stays faded on it
+
+    const head = $(".dash-head", inn), tiles = $$(".tile", inn), key = tiles[0];
+    const rest = inView([...tiles.slice(1), $(".dash-foot", inn)]);
+    track(head.animate([{ opacity: 0, transform: `translate3d(${dir * 18}px, 0, 0)` }, { opacity: 1, transform: "none" }],
+      { duration: 260, delay: 40, easing: E_OUT, fill: "backwards" }));
+    // the key panel opens as a circle centred on the step node the line just reached
+    const n = nodeCenter(to), r = key.getBoundingClientRect();
+    const ox = n.x - r.left, oy = n.y - r.top;
+    const R = Math.hypot(Math.max(Math.abs(ox), Math.abs(r.width - ox)), Math.max(Math.abs(oy), Math.abs(r.height - oy)));
+    const r0 = Math.max(0, -oy - 2);
+    track(key.animate([
+      { clipPath: `circle(${r0}px at ${ox}px ${oy}px)`, opacity: 0.4 },
+      { clipPath: `circle(${R}px at ${ox}px ${oy}px)`, opacity: 1 }],
+      { duration: 420, delay: 70, easing: "cubic-bezier(0.32, 0.72, 0, 1)", fill: "backwards" }));
+    rest.forEach((el, i) => track(el.animate(
+      [{ opacity: 0, transform: `translate3d(${dir * 22}px, 10px, 0)` }, { opacity: 1, transform: "none" }],
+      { duration: 280, delay: 150 + i * 40, easing: E_OUT, fill: "backwards" })));
+
+    // a cancelled animation's `finished` never settles, so wait only on the ones still in play
+    await Promise.all(NAV.anims.filter((a) => a.playState !== "idle").map(done));
+    if (alive()) settle();
+  }
+
+  // a thin cash line from the button (or the screen edge) to the target step's node; the node lands and rings
+  function connector(origin, to, dir, track) {
+    const svg = $("#transit"), line = $("#tr-line"), glow = $("#tr-glow"), node = $("#tr-node"), ring = $("#tr-ring");
+    const end = nodeCenter(to);
+    let start = null;
+    if (origin) {
+      const r = origin.getBoundingClientRect();
+      if (r.bottom > 0 && r.top < innerHeight) start = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    if (!start) start = { x: dir > 0 ? -8 : innerWidth + 8, y: innerHeight * 0.7 };
+    svg.setAttribute("viewBox", `0 0 ${innerWidth} ${innerHeight}`);
+    // a couple of gentle dips like a balance line, easing into a climb to the node; the dips run across the travel direction
+    const dx = end.x - start.x, dy = end.y - start.y, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
+    const K = 9, pts = [];
+    for (let i = 0; i <= K; i++) {
+      const t = i / K, wob = i === 0 || i === K ? 0 : Math.sin(t * Math.PI * 2) * 14 * (1 - t);
+      const bend = Math.pow(t, 1.6) - t;              // bows the path so it arrives at the node from below
+      pts.push([start.x + dx * t + nx * wob, start.y + dy * (t + bend * 0.6) + ny * wob]);
+    }
+    const d = smoothPath(pts);
+    line.setAttribute("d", d); glow.setAttribute("d", d);
+    [node, ring].forEach((c) => { c.setAttribute("cx", end.x); c.setAttribute("cy", end.y); });
+    svg.classList.add("on");
+    const L = line.getTotalLength();
+    const draw = [{ strokeDasharray: `${L} ${L}`, strokeDashoffset: L }, { strokeDasharray: `${L} ${L}`, strokeDashoffset: 0 }];
+    const lineOpts = { duration: 380, delay: 30, easing: "cubic-bezier(0.65, 0, 0.35, 1)", fill: "both" };
+    track(line.animate(draw, lineOpts)); track(glow.animate(draw, lineOpts));
+    track(node.animate([{ transform: "scale(0)", opacity: 0 }, { transform: "scale(1)", opacity: 1 }],
+      { duration: 200, delay: 360, easing: E_OUT, fill: "both" }));
+    track(ring.animate([{ transform: "scale(0.6)", opacity: 0.55 }, { transform: "scale(2.6)", opacity: 0 }],
+      { duration: 340, delay: 380, easing: E_OUT, fill: "both" }));
+    track(svg.animate([{ opacity: 1 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }], { duration: 720, fill: "both" }));
+  }
+
+  function pressFx(btn) {                             // CTA: a quick press and the arrow nudges toward where it goes
+    if (motionOff()) return;
+    btn.animate([{ transform: "none" }, { transform: "scale(0.97)" }, { transform: "none" }], { duration: 180, easing: E_OUT });
+    const icon = $("svg", btn); if (!icon) return;
+    const dx = icon.classList.contains("cta-back") ? -5 : 5;
+    icon.animate([{ transform: "none" }, { transform: `translateX(${dx}px)` }, { transform: "none" }], { duration: 260, easing: E_OUT });
   }
 
   // ---------------------------------------------------------------- account render (static parts)
@@ -311,9 +489,11 @@
     if (!text) { $("#twist-text").focus(); toast("Paste a twist card first."); return; }
     if (btn.classList.contains("busy")) return;
     btn.classList.add("busy"); btn.firstElementChild.textContent = "Reading…";
+    const acct = S.acct;
     try {
       const t = await api("/api/twist", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ account_id: S.acct, text }) });
+        body: JSON.stringify({ account_id: acct, text }) });
+      if (S.acct !== acct) return;        // the account changed while the card was being read
       const before = { ...S.shock, target: planFor(S.acct).target };
       S.shock = { ...t.shock }; S.preset = "custom"; S.question = t.question || "auto";
       S.label = t.label || "";
@@ -530,8 +710,13 @@
 
   function renderTrajectory(animate = true) {
     const box = $("#traj"), sim = S.sim, s = sim.projection, n = s.months.length - 1;
-    const W = box.clientWidth || 800, H = box.clientHeight || 320, m = { l: 60, r: 18, t: 36, b: 44 };
     const showPlan = sim.confirmed > 0;
+    $("#lg-timed").hidden = !s.timed;
+    $(".lg-plan").parentElement.style.opacity = showPlan ? 1 : .4;
+    if (!box.clientWidth) { T.dirty = true; return; }   // dashboard hidden: draw at the real size when it shows
+    T.dirty = false;
+    const W = box.clientWidth, H = box.clientHeight || 320, m = { l: 60, r: 18, t: 36, b: 44 };
+    box._w = W;
     const to = { today: s.today, shock: s.shock, plan: showPlan ? s.plan : s.shock };
     const vals = s.today.concat(s.shock, showPlan ? s.plan : [], s.timed || [], [0]);
     // focus on the cushion and where it reaches $0: floor at −35% of the cushion, top stretches to fit every line
@@ -616,7 +801,6 @@
     }
 
     const lt = $("#ln-timed", box);
-    $("#lg-timed").hidden = !s.timed;
     if (lt && animate && !reduced) {         // the month-by-month line draws itself in
       const L = lt.getTotalLength();
       lt.animate([{ strokeDasharray: `${L} ${L}`, strokeDashoffset: L }, { strokeDasharray: `${L} ${L}`, strokeDashoffset: 0 }],
@@ -635,14 +819,21 @@
       tip.style.left = Math.min(Math.max(px + 14, 0), rect.width - 180) + "px"; tip.style.top = "8px"; tip.style.opacity = 1;
     });
     svg.addEventListener("pointerleave", () => { tip.style.opacity = 0; hv.setAttribute("visibility", "hidden"); });
-    $(".lg-plan").parentElement.style.opacity = showPlan ? 1 : .4;
   }
 
   // ---------------------------------------------------------------- monthly spending (last 12 recorded months)
   function drawMonths() {
     const d = S.data, box = $("#ch-months"); if (!d || !box) return;
     const rows = d.spending, typ = d.profile.S;
-    const W = box.clientWidth || 900, H = box.clientHeight || 240, m = { l: 52, r: 8, t: 10, b: 26 };
+    $("#sp-typical").textContent = money(typ);
+    $("#sp-note").textContent = rows.length
+      ? `Actual money out, ${monthLabel(rows[0].month)} – ${monthLabel(rows[rows.length - 1].month)}. ` +
+        `The typical month is the median over all ${d.n_months} recorded months, the figure the judging method uses, so single months can sit above or below it.`
+      : "No months recorded.";
+    if (!box.clientWidth) { drawMonths.dirty = true; return; }   // dashboard hidden: draw when it shows
+    drawMonths.dirty = false;
+    const W = box.clientWidth, H = box.clientHeight || 240, m = { l: 52, r: 8, t: 10, b: 26 };
+    box._w = W;
     const max = Math.max(...rows.map((r) => r.money_out), typ, 1), ticks = niceTicks(0, max, 3), top = ticks[ticks.length - 1];
     const bw = (W - m.l - m.r) / Math.max(rows.length, 1), Y = (v) => m.t + (1 - v / top) * (H - m.t - m.b);
     box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Money out per month, last ${rows.length} recorded months, with the typical month as a dashed line">
@@ -653,11 +844,6 @@
          <text class="axis" x="${m.l + i * bw + bw / 2}" y="${H - 8}" text-anchor="middle">${monthLabel(r.month, true)}</text>`).join("")}
       <line class="typical" x1="${m.l}" x2="${W - m.r}" y1="${Y(typ)}" y2="${Y(typ)}"/>
     </svg>`;
-    $("#sp-typical").textContent = money(typ);
-    $("#sp-note").textContent = rows.length
-      ? `Actual money out, ${monthLabel(rows[0].month)} – ${monthLabel(rows[rows.length - 1].month)}. ` +
-        `The typical month is the median over all ${d.n_months} recorded months, the figure the judging method uses, so single months can sit above or below it.`
-      : "No months recorded.";
   }
 
   // ---------------------------------------------------------------- peer benchmark
@@ -687,26 +873,53 @@
   const boldNums = (t) => esc(t).replace(/(\$[\d,]+(?:\/month)?|\d+(?:\.\d+)?%|about \d+ months)/g, "<b>$1</b>");
   const evidence = (t) => esc(t).replace(/(\d+\.\d%) \((\d+\/\d+), 95% CI ([^)]+)\)/g,
     '<span class="stat">$1</span> <span class="ci">($2 · CI $3)</span>');
+  // One plan per row: rank · what to do and why · the evidence. Every number is an API value, only formatted here.
+  // Rows keep the engine's order (safety nets pinned first, then ranked plans). The priority level is a display label
+  // read from the engine's own category: safety net → Urgent, data rank #1 → High, other ranks or "needs support" → Medium,
+  // no clear gap → Low.
+  const KIND_TAG = { safety: "Safety net · before any ranked plan", support: "Needs other support", low: "No clear gap in the data" };
+  const LEVELS = { 4: ["Urgent", "Do now"], 3: ["High", "Best evidence"], 2: ["Medium", "Worth doing"], 1: ["Low", "Optional"] };
+  const levelOf = (pl, rank) => pl.kind === "safety" ? 4 : pl.kind === "rank" ? (rank === 1 ? 3 : 2) : pl.kind === "support" ? 2 : 1;
+  const bars = (lv) => `<svg class="prio-bars" viewBox="0 0 18 14" aria-hidden="true">${[0, 1, 2].map((k) =>
+    `<rect x="${k * 6}" y="${10 - k * 5}" width="4" height="${4 + k * 5}" rx="1" class="${k < Math.min(lv, 3) ? "on" : ""}"/>`).join("")}</svg>`;
   function renderPlans() {
     const box = $("#plans"), plans = S.sim.plans;
     $("#ranked-count").textContent = `${plans.length} plan${plans.length === 1 ? "" : "s"}`;
     const first = new Map($$(".plan-card", box).map((el) => [el.dataset.key, el.getBoundingClientRect()]));
     const fresh = renderPlans._acct !== S.acct;
+    const pct = (x) => `${(x * 100).toFixed(1)}%`;
+    // one risk scale for every row, so the dumbbells compare across plans
+    const top = Math.max(0.05, ...plans.filter((p) => p.new != null).map((p) => p.start));
+    const at = (x) => `${Math.min(Math.max(x / top, 0), 1) * 100}%`;
+    let rank = 0;
     box.innerHTML = plans.length ? plans.map((pl, i) => {
       const key = pl.title.replace(/[\d$,.%]+/g, "#");
-      const model = pl.new == null ? "" : `<div class="plan-model"><div class="bars">
-          <span class="b-now" style="transform:scaleX(${Math.min(pl.start / 0.4, 1)})"></span>
-          <span class="b-after" style="transform:scaleX(${Math.min(pl.new / 0.4, 1)})"></span></div>
-          <span>Predicted risk ${(pl.start * 100).toFixed(1)}% → ${(pl.new * 100).toFixed(1)}% for customers already in the "after" profile.
-          ${pl.test ? `<span class="plan-test${pl.sig ? " sig" : ""}">${esc(pl.test)}</span>` : ""}</span></div>`;
-      return `<article class="plan-card k-${pl.kind}" data-key="${esc(key)}" style="--i:${i}">
-        <div class="plan-top"><span class="plan-pill">${esc(pl.pill)}</span></div>
-        <h3 class="plan-title">${esc(pl.title)}</h3>
-        <p class="plan-do">${boldNums(pl.do)}</p>
-        <div class="why"><span>For this customer</span><div>${esc(pl.you)}</div></div>
-        <div class="why"><span>In the data</span><div>${evidence(pl.data)}</div></div>
-        <div class="why"><span>What Tangerine can do</span><div>${esc(pl.bank)}</div></div>${model}</article>`;
-    }).join("") : `<p class="plan-do">This customer can absorb this shock without changes.</p>`;
+      const ranked = pl.kind === "rank";
+      if (ranked) rank++;
+      const tag = ranked && pl.red != null ? `Ranked #${rank} by the data · gap ${pl.red.toFixed(1)} pts` : KIND_TAG[pl.kind] || "";
+      const lv = levelOf(pl, rank), [word, cap] = LEVELS[lv];
+      const ev = pl.new == null
+        ? `<p class="ev-label">In the data</p><p class="ev-data">${evidence(pl.data)}</p>`
+        : `<p class="ev-label">Predicted risk within a year</p>
+           <p class="ev-nums"><span class="ev-from">${pct(pl.start)}</span><span class="ev-arrow" aria-hidden="true">→</span><span class="ev-to">${pct(pl.new)}</span></p>
+           <div class="ev-track" aria-hidden="true"><i class="ev-span" style="left:${at(pl.new)};right:calc(100% - ${at(pl.start)})"></i>
+             <i class="ev-dot is-from" style="left:${at(pl.start)}"></i><i class="ev-dot is-to" style="left:${at(pl.new)}"></i></div>
+           <p class="ev-cap">This customer now → customers already in the "after" profile</p>
+           <p class="ev-data">${evidence(pl.data)}</p>
+           ${pl.test ? `<p class="ev-test">${esc(pl.test)}</p>` : ""}`;
+      return `<li class="plan-card k-${pl.kind} lv-${lv}${i === 0 ? " is-top" : ""}" data-key="${esc(key)}" style="--i:${i}">
+        <div class="plan-rank" aria-hidden="true">${bars(lv)}<span class="plan-num">${word}</span><span class="plan-cap">${cap}</span></div>
+        <div class="plan-body">
+          <p class="plan-tag">${esc(tag)}</p>
+          <h3 class="plan-title"><span class="sr-only">${word} priority: </span>${esc(pl.title)}</h3>
+          <p class="plan-do">${boldNums(pl.do)}</p>
+          <dl class="plan-why">
+            <div><dt>Why for this customer</dt><dd>${esc(pl.you)}</dd></div>
+            <div><dt>What Tangerine can do</dt><dd>${esc(pl.bank)}</dd></div>
+          </dl>
+        </div>
+        <div class="plan-ev">${ev}</div></li>`;
+    }).join("") : `<li class="plan-empty">This customer can absorb this shock without changes.</li>`;
     renderPlans._acct = S.acct;
     if (reduced) return;
     $$(".plan-card", box).forEach((el) => {
@@ -735,9 +948,11 @@
     const btn = $("#msg-go"), body = $("#msg-body");
     if (btn.classList.contains("busy")) return;
     btn.classList.add("busy"); body.classList.add("loading");
+    const key = JSON.stringify(simBody());
     try {
-      const m = await api("/api/message", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(simBody()) });
+      const m = await api("/api/message", { method: "POST", headers: { "Content-Type": "application/json" }, body: key });
       body.classList.remove("loading");
+      if (JSON.stringify(simBody()) !== key) return;   // account or scenario changed meanwhile: keep the current message
       $("#msg-src").textContent = m.source === "Gemini" ? "Gemini" : "Template";
       if (m.source !== "Gemini") toast(`${m.error || "Gemini unavailable"}: kept the template message.`);
       typeOut(body, m.message);
@@ -797,17 +1012,28 @@
       const b = e.target.closest("button[data-mode]"); if (!b || !S.data) return; S.peerMode = b.dataset.mode; renderPeers();
     });
     $("#back").addEventListener("click", () => { history.pushState(null, "", "#/"); showLanding(); });
+    $("#steps").addEventListener("click", (e) => { const b = e.target.closest(".step"); if (b) goStep(Number(b.dataset.step)); });
+    $("#step-prev").addEventListener("click", () => goStep(NAV.want - 1));
+    $("#step-next").addEventListener("click", () => goStep(NAV.want + 1));
+    $$("[data-go]").forEach((b) => b.addEventListener("click", () => { pressFx(b); goStep(Number(b.dataset.go), { origin: b }); }));
     document.addEventListener("keydown", (e) => {
       if (e.key !== "/" || /input|textarea|select/i.test(document.activeElement.tagName)) return;
       e.preventDefault(); ($("#main").hidden ? $("#spot-input") : $("#switch-input")).focus();
     });
     window.addEventListener("popstate", route);
-    let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (S.sim) renderTrajectory(false); drawMonths(); }, 120); });
+    let rz; window.addEventListener("resize", () => {
+      clearTimeout(rz);
+      rz = setTimeout(() => { measureChrome(); if (S.sim) renderTrajectory(false); drawMonths(); }, 120);
+    });
     route();
   }
+  // #/account/{id}[/plan|/risk|/evidence] · back/forward between steps of the same account keeps every input
   function route() {
-    const m = location.hash.match(/^#\/account\/(\d+)/);
-    if (m) openAccount(Number(m[1])); else if (!$("#main").hidden) showLanding();
+    const m = location.hash.match(/^#\/account\/(\d+)(?:\/([a-z]+))?/);
+    if (!m) { if (!$("#main").hidden) showLanding(); return; }
+    const id = Number(m[1]), step = stepOf(m[2]);
+    if (id === S.acct && !$("#main").hidden) goStep(step, { push: false });
+    else openAccount(id, { step, push: false });
   }
   boot();
 })();

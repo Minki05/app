@@ -99,7 +99,7 @@
   --plan-text: #5EE0A0; --risk: #FF6B5E; --risk-text: #FF8A7F; --risk-wash: rgba(255, 107, 94, .13);
   --ok: #5EE0A0; --ok-wash: rgba(94, 224, 160, .11); --slate: #7D7970;
   --slab: #22211F; --slab-2: #2B2A27;
-  --grid: rgba(245, 243, 238, .07); --zero: #4A4843; --peer-bar: #4A4843; --appbar: rgba(13, 13, 12, .82);
+  --grid: rgba(245, 243, 238, .07); --zero: #4A4843; --peer-bar: #4A4843; --appbar: rgba(13, 13, 12, .95);
   --shadow-3: 0 2px 4px rgba(0, 0, 0, .4), 0 28px 56px -16px rgba(0, 0, 0, .6);
 }
 @media (prefers-color-scheme: dark) {
@@ -112,7 +112,7 @@
     --plan-text: #5EE0A0; --risk: #FF6B5E; --risk-text: #FF8A7F; --risk-wash: rgba(255, 107, 94, .13);
     --ok: #5EE0A0; --ok-wash: rgba(94, 224, 160, .11); --slate: #7D7970;
     --slab: #22211F; --slab-2: #2B2A27;
-    --grid: rgba(245, 243, 238, .07); --zero: #4A4843; --peer-bar: #4A4843; --appbar: rgba(13, 13, 12, .82);
+    --grid: rgba(245, 243, 238, .07); --zero: #4A4843; --peer-bar: #4A4843; --appbar: rgba(13, 13, 12, .95);
     --shadow-3: 0 2px 4px rgba(0, 0, 0, .4), 0 28px 56px -16px rgba(0, 0, 0, .6);
   }
 }
